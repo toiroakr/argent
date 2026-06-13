@@ -1,0 +1,23 @@
+{
+  "name": "argent-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Assess the risk of npm packages before you install them, using socket.dev, deps.dev, OpenSSF Scorecard and Snyk Advisor.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
+  "scripts": {
+    "build": "pnpm --filter \"./packages/*\" run build",
+    "build:web": "pnpm --filter @argent/web run build",
+    "dev:web": "pnpm --filter @argent/web run dev",
+    "cli": "pnpm --filter @argent/cli run start --",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test"
+  },
+  "license": "MIT"
+}

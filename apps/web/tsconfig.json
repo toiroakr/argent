@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@argent/core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

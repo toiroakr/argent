@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>argent — npm package risk check</title>
+    <meta
+      name="description"
+      content="Assess the risk of an npm package before you install it: deps.dev, OpenSSF Scorecard, socket.dev and Snyk Advisor."
+    />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>🛡️ argent</h1>
+        <p class="tagline">
+          Check an npm package's supply-chain risk <em>before</em> you install it.
+        </p>
+      </header>
+
+      <form id="form" autocomplete="off">
+        <input
+          id="pkg"
+          name="pkg"
+          type="text"
+          placeholder="package name, e.g. express or @scope/pkg@1.0.0"
+          required
+          spellcheck="false"
+        />
+        <button type="submit" id="submit">Check</button>
+      </form>
+
+      <p class="note" id="sources"></p>
+
+      <section id="result" aria-live="polite"></section>
+
+      <footer>
+        <p>
+          Runs entirely in your browser against public APIs.
+          <a href="https://github.com/toiroakr/argent">Source &amp; CLI on GitHub</a>.
+        </p>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
