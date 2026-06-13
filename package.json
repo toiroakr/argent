@@ -15,7 +15,7 @@
     "build": "pnpm --filter \"./packages/*\" run build",
     "build:web": "pnpm --filter @argent/web run build",
     "dev:web": "pnpm --filter @argent/web run dev",
-    "cli": "pnpm --filter @argent/cli run start --",
+    "cli": "pnpm --filter @toiroakr/argent run start --",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test"
   },

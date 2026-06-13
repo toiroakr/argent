@@ -31,21 +31,30 @@ sources that returned data.
 
 ### CLI
 
+> ℹ️ Published as the scoped package **`@toiroakr/argent`** (the bare `argent`
+> name on npm belongs to an unrelated project). The installed command is still
+> `argent`. _Not yet published_ — see [Running from source](#development) until
+> the first release.
+
 ```bash
 # one-off, no install
-npx argent express
+npx @toiroakr/argent express
+
+# or install the `argent` command globally
+npm i -g @toiroakr/argent
+argent express
 
 # pin a version, check several at once
-npx argent left-pad@1.3.0 lodash @sindresorhus/is
+npx @toiroakr/argent left-pad@1.3.0 lodash @sindresorhus/is
 
 # CI gate: non-zero exit when risk >= high
-npx argent chalk --fail-on high
+npx @toiroakr/argent chalk --fail-on high
 
 # machine-readable
-npx argent express --json
+npx @toiroakr/argent express --json
 
 # enable socket.dev
-SOCKET_API_KEY=sk_... npx argent express
+SOCKET_API_KEY=sk_... npx @toiroakr/argent express
 ```
 
 Options: `--json`, `--fail-on <low|medium|high|critical>`,
@@ -63,9 +72,9 @@ called safely from the browser.
 ## Repository layout
 
 ```
-packages/core   @argent/core   — provider logic + normalization (shared)
-packages/cli    argent         — the CLI (published to npm)
-apps/web        @argent/web    — the GitHub Pages form (Vite)
+packages/core   @argent/core       — provider logic + normalization (private, bundled into the CLI)
+packages/cli    @toiroakr/argent   — the CLI (the package published to npm)
+apps/web        @argent/web        — the GitHub Pages form (Vite)
 ```
 
 The CLI and the web app share the exact same evaluation logic in

@@ -1,5 +1,5 @@
 {
-  "name": "argent",
+  "name": "@toiroakr/argent",
   "version": "0.1.0",
   "description": "Assess the risk of an npm package before you install it — deps.dev, OpenSSF Scorecard, socket.dev and Snyk Advisor in one command.",
   "type": "module",
@@ -18,16 +18,26 @@
     "scorecard",
     "snyk"
   ],
+  "homepage": "https://github.com/toiroakr/argent#readme",
+  "bugs": "https://github.com/toiroakr/argent/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toiroakr/argent.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@argent/core": "workspace:*",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
+    "@argent/core": "workspace:*",
     "@types/node": "^22.10.2",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
