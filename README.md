@@ -6,6 +6,13 @@
 single, normalized report so you can make an informed call before adding a
 dependency.
 
+> **Why "argent"?** _Argent_ is the heraldic/French word for **silver**. In
+> European courts, and among Japanese shōguns and daimyō from the Sengoku
+> through the Edo period, silver tableware and chopsticks were used to test
+> food for poison before eating — sometimes alongside a dedicated taster
+> (_dokumi-yaku_). `argent` is that silver spoon for your dependencies:
+> check a package for "poison" *before* you ingest it.
+
 | Source | What it tells you | CLI | Web |
 | --- | --- | :-: | :-: |
 | [deps.dev](https://deps.dev) | Known security advisories, declared licenses, source repo | ✅ | ✅ |
