@@ -3,22 +3,29 @@ import { levelFromScore } from "../risk.js";
 import type { Provider, ProviderResult } from "../types.js";
 
 /**
- * Snyk Advisor has no public API, so this scrapes the package's Advisor page.
- * Scraping is best-effort and brittle by nature: when the markup changes we
- * fall back to "unknown" rather than guessing. CORS blocks it in the browser,
- * where the UI links out instead.
+ * Snyk Advisor has no public API, so this scrapes the package's health page.
+ * snyk.io/advisor now 301-redirects to security.snyk.io, so we hit that
+ * directly (avoiding a slow redirect). The page is large (~300 KB) and can take
+ * several seconds, hence the generous timeout. Scraping is best-effort and
+ * brittle: when the markup changes we fall back to "unknown" rather than guess.
+ * CORS blocks it in the browser, where the UI links out instead.
  */
 export const snykProvider: Provider = {
   id: "Snyk Advisor",
   browserSafe: false,
   async evaluate(ctx): Promise<ProviderResult> {
-    const url = `https://snyk.io/advisor/npm-package/${ctx.name}`;
+    const url = `https://security.snyk.io/package/npm/${ctx.name}`;
     const base = { provider: "Snyk Advisor", url };
 
     try {
       const html = await getText(url, {
         fetch: ctx.fetch,
-        headers: { "user-agent": "argent/0.1 (+https://github.com/toiroakr/argent)" },
+        timeoutMs: 20_000,
+        // Identify honestly — security.snyk.io serves the page to a truthful
+        // tool UA (and its robots.txt allows it); no browser spoofing needed.
+        headers: {
+          "user-agent": "argent (+https://github.com/toiroakr/argent)",
+        },
       });
 
       const score = extractScore(html);
