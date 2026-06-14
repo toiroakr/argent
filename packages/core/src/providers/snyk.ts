@@ -14,22 +14,28 @@ export const snykProvider: Provider = {
   id: "Snyk Advisor",
   browserSafe: false,
   async evaluate(ctx): Promise<ProviderResult> {
-    const url = `https://security.snyk.io/package/npm/${ctx.name}`;
+    // Human-readable link (snyk.io/advisor redirects to security.snyk.io and
+    // handles the raw scoped name in a browser); fetch the canonical encoded
+    // URL directly so scoped names (@scope/pkg) don't 404 on the redirect.
+    const url = `https://snyk.io/advisor/npm-package/${ctx.name}`;
+    const fetchUrl = `https://security.snyk.io/package/npm/${encodeURIComponent(ctx.name)}`;
     const base = { provider: "Snyk Advisor", url };
 
     try {
       // No custom User-Agent: security.snyk.io serves the page with the default
       // fetch UA and its robots.txt allows it, so there's nothing to spoof.
-      const html = await getText(url, { fetch: ctx.fetch, timeoutMs: 20_000 });
+      const html = await getText(fetchUrl, { fetch: ctx.fetch, timeoutMs: 20_000 });
 
       const score = extractScore(html);
 
       if (score === undefined) {
+        // Snyk currently doesn't publish a health score for some packages
+        // (notably scoped @scope/pkg names), so this is expected, not an error.
         return {
           ...base,
           ok: true,
           level: "unknown",
-          summary: "Could not parse Snyk health score (see the Advisor page)",
+          summary: "No Snyk health score available for this package",
           findings: [],
         };
       }
