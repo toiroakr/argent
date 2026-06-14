@@ -141,6 +141,18 @@ button:disabled {
 .provider.unknown {
   border-left-color: var(--unknown);
 }
+.provider.advisory {
+  border-left-color: var(--accent);
+  border-left-style: dashed;
+}
+
+.advisory-tag {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  white-space: nowrap;
+}
 
 .provider-head h3 {
   margin: 0;

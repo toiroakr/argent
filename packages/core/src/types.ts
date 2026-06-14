@@ -38,6 +38,12 @@ export interface ProviderResult {
    * (e.g. requires an API key, or is blocked by CORS in the browser).
    */
   skipped?: boolean;
+  /**
+   * Marks a result as a separate decision-aid axis (e.g. build-vs-buy) rather
+   * than a security signal. Advisory results are shown in the report but are
+   * NOT folded into the package's security `overall` level.
+   */
+  advisory?: boolean;
 }
 
 export interface PackageRef {

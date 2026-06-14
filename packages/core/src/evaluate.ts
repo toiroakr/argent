@@ -1,4 +1,5 @@
 import { evaluateDepsDev } from "./providers/depsdev.js";
+import { reimplementabilityProvider } from "./providers/reimplementability.js";
 import { scorecardProvider } from "./providers/scorecard.js";
 import { snykProvider } from "./providers/snyk.js";
 import { socketProvider } from "./providers/socket.js";
@@ -12,7 +13,12 @@ import type {
 } from "./types.js";
 
 /** Providers that run after deps.dev resolves the version + repo. */
-const SECONDARY: Provider[] = [scorecardProvider, socketProvider, snykProvider];
+const SECONDARY: Provider[] = [
+  scorecardProvider,
+  socketProvider,
+  snykProvider,
+  reimplementabilityProvider,
+];
 
 export interface EvaluateOptions extends EvalConfig {
   /** Specific version to evaluate; defaults to the package's default version. */
@@ -76,8 +82,10 @@ export async function evaluatePackage(
   );
 
   const results = [resolved.result, ...secondary];
+  // Advisory axes (e.g. build-vs-buy) are informational and must not raise the
+  // security overall level.
   const overall = aggregate(
-    results.filter((r) => r.ok).map((r) => r.level),
+    results.filter((r) => r.ok && !r.advisory).map((r) => r.level),
   );
 
   return {

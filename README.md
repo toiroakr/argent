@@ -19,6 +19,7 @@ dependency.
 | [OpenSSF Scorecard](https://securityscorecards.dev) | Heuristic security health of the source repo | ✅ | ✅ |
 | [socket.dev](https://socket.dev) | Supply-chain risk from static analysis | ✅¹ | 🔗² |
 | [Snyk Advisor](https://snyk.io/advisor) | Package health score (security/popularity/maintenance/community) | ✅³ | 🔗² |
+| **Build-vs-Buy** | Adoption aid: is it small & mundane enough to reimplement yourself (e.g. with AI) instead of taking the dependency? | ✅ | ✅ |
 
 > ¹ Requires a `SOCKET_API_KEY`. ² Needs a server/CLI (API key or CORS), so the
 > web app links out instead. ³ Scraped from the public Advisor page (best-effort).
@@ -26,6 +27,25 @@ dependency.
 Results are normalized to a shared scale — `low` · `medium` · `high` ·
 `critical` · `unknown` — and the report's overall level is the worst across all
 sources that returned data.
+
+### Build-vs-Buy (adoption aid)
+
+Beyond "is it risky", `argent` also asks **"should you even take this
+dependency?"** A tiny, mundane package is often cheaper to reimplement (these
+days, with AI) than to carry — every dependency is supply-chain surface area.
+The `Build-vs-Buy` signal combines:
+
+- **Size & self-containment** — unpacked size and file count (npm registry) plus
+  the resolved transitive dependency count (deps.dev).
+- **Domain sensitivity** — whether the package looks like crypto / auth / jwt /
+  sanitization / randomness etc. Rolling your own (or AI-generating) those is a
+  bad idea no matter how small, so they always lean **KEEP**.
+
+It produces a verdict — **REIMPLEMENT? · CONSIDER · KEEP** — e.g. `is-odd`
+(6 KB, trivial) → REIMPLEMENT?, `jsonwebtoken` (security-sensitive) → KEEP,
+`express` (large graph) → KEEP. This is an **adoption axis, not a security
+severity**, so it is shown separately and never raises the security `overall`
+level.
 
 ## Two ways to use it
 
@@ -107,6 +127,8 @@ pnpm cli express --json
 - Advisory severities (`CRITICAL/HIGH/MEDIUM/LOW`) map directly.
 - The package's **overall** level is the worst real level across providers;
   `unknown` never raises the overall on its own.
+- The `Build-vs-Buy` axis is **advisory**: its REIMPLEMENT?/CONSIDER/KEEP verdict
+  is reported but excluded from the security `overall`.
 
 > ⚠️ `argent` is a decision aid, not a guarantee. A clean report means "no
 > signal from these sources", not "safe". Treat results as one input alongside

@@ -31,9 +31,23 @@ function badge(level: RiskLevel): string {
   return `<span class="badge ${level}">${level.toUpperCase()}</span>`;
 }
 
+// Build-vs-buy verdict labels — an adoption axis, not a security severity.
+const ADVISORY_TAG: Record<RiskLevel, string> = {
+  high: "REIMPLEMENT?",
+  medium: "CONSIDER",
+  low: "KEEP",
+  critical: "KEEP",
+  unknown: "N/A",
+};
+
 function renderProvider(r: ProviderResult): string {
-  const score = r.score !== undefined ? `<span class="score">${r.score}/100</span>` : "";
-  const cls = r.skipped ? "skipped" : r.ok ? r.level : "error";
+  const isAdvisory = r.advisory && r.ok;
+  const score = isAdvisory
+    ? `<span class="advisory-tag">💡 ${ADVISORY_TAG[r.level]}</span>`
+    : r.score !== undefined
+      ? `<span class="score">${r.score}/100</span>`
+      : "";
+  const cls = isAdvisory ? "advisory" : r.skipped ? "skipped" : r.ok ? r.level : "error";
   const findings = r.findings
     .map(
       (f) =>
@@ -50,7 +64,7 @@ function renderProvider(r: ProviderResult): string {
       <div class="provider-head">
         <h3>${escape(r.provider)}</h3>
         ${score}
-        ${badge(r.ok ? r.level : "unknown")}
+        ${isAdvisory ? "" : badge(r.ok ? r.level : "unknown")}
       </div>
       <p class="provider-summary">${escape(r.summary)}${r.error ? ` — <span class="err">${escape(r.error)}</span>` : ""}</p>
       ${findings ? `<ul class="findings">${findings}</ul>` : ""}

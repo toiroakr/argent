@@ -25,7 +25,20 @@ function paintLevel(level: RiskLevel): string {
   }
 }
 
+/**
+ * Advisory (build-vs-buy) results are an adoption axis, not a security
+ * severity, so they get a neutral verdict tag instead of risk colors.
+ */
+const ADVISORY_TAG: Record<RiskLevel, string> = {
+  high: pc.cyan("REIMPLEMENT?"),
+  medium: pc.yellow("CONSIDER"),
+  low: pc.green("KEEP"),
+  critical: pc.green("KEEP"),
+  unknown: pc.dim("N/A"),
+};
+
 function statusIcon(r: ProviderResult): string {
+  if (r.advisory) return r.ok ? "💡" : pc.red("✗");
   if (r.skipped) return pc.dim("○");
   if (!r.ok) return pc.red("✗");
   switch (r.level) {
@@ -53,8 +66,13 @@ export function renderReport(report: RiskReport): string {
   lines.push("");
 
   for (const r of report.results) {
-    const score = r.score !== undefined ? pc.dim(` [${r.score}/100]`) : "";
-    lines.push(`  ${statusIcon(r)} ${pc.bold(r.provider)}${score}  ${r.summary}`);
+    const tag =
+      r.advisory && r.ok
+        ? ` ${ADVISORY_TAG[r.level]}`
+        : r.score !== undefined
+          ? pc.dim(` [${r.score}/100]`)
+          : "";
+    lines.push(`  ${statusIcon(r)} ${pc.bold(r.provider)}${tag}  ${r.summary}`);
     if (r.error) lines.push(pc.dim(`      ${r.error}`));
     for (const f of r.findings) {
       const lvl = f.level && f.level !== "unknown" ? ` ${paintLevel(f.level)}` : "";
