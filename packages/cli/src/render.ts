@@ -142,7 +142,7 @@ export function renderAudit(report: AuditReport, top: number): string {
   const shown = report.ranking.slice(0, top);
   const rows = shown.map((d) => ({
     d,
-    pkg: `${d.name}@${d.version}${d.direct ? "" : " ·"}`,
+    pkg: `${d.name}@${d.version}${d.dev ? " (dev)" : d.direct ? "" : " ·"}`,
     risk: d.advisoryCount === 0 ? "clean" : `${d.severity}(${d.advisoryCount})`,
   }));
   const pkgW = Math.max(7, ...rows.map((r) => r.pkg.length));

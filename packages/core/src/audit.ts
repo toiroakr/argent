@@ -15,6 +15,8 @@ export interface DepAudit {
   version: string;
   /** True when the package depends on this directly (vs. only transitively). */
   direct: boolean;
+  /** True when this came from devDependencies (manifest audit only). */
+  dev?: boolean;
   /** Transitive dependencies this package itself pulls in (within this graph). */
   transitiveDeps: number;
   unpackedSize?: number;
@@ -269,45 +271,132 @@ export async function auditDependencies(
   const ranking = await mapLimit(
     limited,
     options.concurrency ?? 8,
-    async ({ node, index }): Promise<DepAudit> => {
-      const depName = node.versionKey.name;
-      const depVersion = node.versionKey.version;
-      const transitiveDeps = transitiveCount(adj, index);
-
-      const [risk, reimpl] = await Promise.all([
-        depRisk(depName, depVersion, fetchImpl),
-        depReimpl(depName, depVersion, transitiveDeps, fetchImpl),
-      ]);
-
-      const partial: Omit<DepAudit, "reasons" | "dropScore"> = {
-        name: depName,
-        version: depVersion,
-        direct: node.relation === "DIRECT",
-        transitiveDeps,
-        unpackedSize: reimpl.unpackedSize,
-        advisoryCount: risk.count,
-        severity: risk.level,
-        verdict: reimpl.verdict,
-        sensitive: reimpl.sensitive,
-      };
-      // Clean deps contribute no risk even though their display level is "low".
-      const severityScore = risk.count === 0 ? 0 : SEVERITY_SCORE[risk.level];
-      const score = scoreDrop(severityScore, reimpl.verdict, reimpl.sensitive);
-      return { ...partial, dropScore: score, reasons: buildReasons(partial) };
-    },
+    ({ node, index }): Promise<DepAudit> =>
+      assembleDep(
+        {
+          name: node.versionKey.name,
+          version: node.versionKey.version,
+          direct: node.relation === "DIRECT",
+        },
+        transitiveCount(adj, index),
+        fetchImpl,
+      ),
   );
 
+  sortRanking(ranking);
+
+  return {
+    target: { name, version },
+    totalDependencies: total,
+    evaluated: limited.length,
+    ranking,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function sortRanking(ranking: DepAudit[]): void {
   ranking.sort(
     (a, b) =>
       b.dropScore - a.dropScore ||
       SEVERITY_SCORE[b.severity] - SEVERITY_SCORE[a.severity] ||
       a.name.localeCompare(b.name),
   );
+}
+
+/** Builds a single DepAudit from the risk + reimplementability lookups. */
+async function assembleDep(
+  entry: { name: string; version: string; direct: boolean; dev?: boolean },
+  transitiveDeps: number,
+  fetchImpl: typeof fetch,
+): Promise<DepAudit> {
+  const [risk, reimpl] = await Promise.all([
+    depRisk(entry.name, entry.version, fetchImpl),
+    depReimpl(entry.name, entry.version, transitiveDeps, fetchImpl),
+  ]);
+
+  const partial: Omit<DepAudit, "reasons" | "dropScore"> = {
+    name: entry.name,
+    version: entry.version,
+    direct: entry.direct,
+    dev: entry.dev,
+    transitiveDeps,
+    unpackedSize: reimpl.unpackedSize,
+    advisoryCount: risk.count,
+    severity: risk.level,
+    verdict: reimpl.verdict,
+    sensitive: reimpl.sensitive,
+  };
+  // Clean deps contribute no risk even though their display level is "low".
+  const severityScore = risk.count === 0 ? 0 : SEVERITY_SCORE[risk.level];
+  const score = scoreDrop(severityScore, reimpl.verdict, reimpl.sensitive);
+  return { ...partial, dropScore: score, reasons: buildReasons(partial) };
+}
+
+/** Total transitive dependencies of a single package (its whole graph). */
+async function depTransitiveCount(
+  name: string,
+  version: string,
+  fetchImpl: typeof fetch,
+): Promise<number> {
+  try {
+    const graph = await getJson<Graph>(
+      `${DEPSDEV}/systems/npm/packages/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}:dependencies`,
+      { fetch: fetchImpl },
+    );
+    return Math.max(0, (graph.nodes ?? []).length - 1);
+  } catch {
+    return 0;
+  }
+}
+
+export interface AuditEntry {
+  name: string;
+  /** Resolved version; when omitted the default version is resolved. */
+  version?: string;
+  dev?: boolean;
+}
+
+/**
+ * Audits an explicit list of dependencies (e.g. from a local package.json),
+ * ranking them the same way as {@link auditDependencies}. Each entry is treated
+ * as a direct dependency; its own transitive footprint is fetched per package.
+ */
+export async function auditEntries(
+  target: { name: string; version: string },
+  entries: AuditEntry[],
+  options: Omit<AuditOptions, "version" | "directOnly"> = {},
+): Promise<AuditReport> {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  if (!fetchImpl) throw new Error("No fetch implementation available");
+
+  const maxDeps = options.maxDeps ?? 250;
+  const limited = entries.slice(0, maxDeps);
+
+  const results = await mapLimit(
+    limited,
+    options.concurrency ?? 8,
+    async (entry): Promise<DepAudit | null> => {
+      try {
+        const version = entry.version ?? (await resolveVersion(entry.name, undefined, fetchImpl));
+        const transitiveDeps = await depTransitiveCount(entry.name, version, fetchImpl);
+        return assembleDep(
+          { name: entry.name, version, direct: true, dev: entry.dev },
+          transitiveDeps,
+          fetchImpl,
+        );
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  const ranking = results.filter((r): r is DepAudit => r !== null);
+  sortRanking(ranking);
 
   return {
-    target: { name, version },
-    totalDependencies: total,
-    evaluated: limited.length,
+    target,
+    totalDependencies: entries.length,
+    evaluated: ranking.length,
     ranking,
     generatedAt: new Date().toISOString(),
   };

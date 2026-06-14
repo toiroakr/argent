@@ -86,11 +86,18 @@ Point `argent` at a package and it walks its whole resolved dependency graph
 is to escape that dependency to improve the package's supply-chain posture.
 
 ```bash
-argent audit express
+argent audit                       # audit the nearest package.json (deps + devDeps)
+argent audit --prod                # ...skipping devDependencies
+argent audit express               # audit a published package's full graph
 argent audit webpack --top 30      # show the top 30 candidates
-argent audit lodash --direct       # only direct dependencies
+argent audit lodash --direct       # only direct dependencies (published-package mode)
 argent audit express --json        # machine-readable ranking
 ```
+
+With **no package argument**, `argent audit` finds the nearest `package.json`
+(walking up from the current directory) and audits its dependencies, using the
+versions actually installed in `node_modules` when available. With a package
+name, it audits that published package's full resolved dependency graph.
 
 ```
   drop  package                     risk    action       why
@@ -105,8 +112,8 @@ a tiny, mundane footprint scores highest; a large or security-sensitive one
 (crypto, auth, …) scores low because reimplementing it is a bad idea. `·` marks
 a transitive (indirect) dependency.
 
-audit options: `--top <n>` (default 25), `--direct`, `--max <n>` (default 250),
-`--json`.
+audit options: `--top <n>` (default 25), `--direct`, `--prod` (skip
+devDependencies), `--max <n>` (default 250), `--json`.
 
 ### Web (GitHub Pages)
 

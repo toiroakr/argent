@@ -1,11 +1,13 @@
 import { parseArgs } from "node:util";
 import {
   auditDependencies,
+  auditEntries,
   availableProviders,
   evaluatePackage,
   type RiskLevel,
 } from "@argent/core";
 import pc from "picocolors";
+import { findManifest, loadManifest } from "./manifest.js";
 import { renderAudit, renderError, renderReport } from "./render.js";
 import { parseSpec } from "./spec.js";
 
@@ -13,13 +15,14 @@ const HELP = `${pc.bold("argent")} — assess the risk of npm packages before yo
 
 ${pc.bold("Usage:")}
   argent <package[@version]> [more packages...] [options]
-  argent audit <package[@version]> [options]
+  argent audit [package[@version]] [options]
 
 ${pc.bold("Examples:")}
   argent express
   argent left-pad@1.3.0 lodash
   argent @sindresorhus/is --json
   argent chalk --fail-on high      ${pc.dim("# non-zero exit if risk >= high (for CI)")}
+  argent audit                     ${pc.dim("# audit the nearest package.json")}
   argent audit express             ${pc.dim("# rank which dependencies to drop")}
   argent audit webpack --top 30 --direct
 
@@ -32,8 +35,10 @@ ${pc.bold("Options:")}
   -h, --help         Show this help
 
 ${pc.bold("audit options:")}
+  (with no package, audits the nearest package.json)
   --top <n>          Show only the top N drop candidates (default 25)
-  --direct           Audit only direct dependencies
+  --direct           Audit only direct dependencies (published-package mode)
+  --prod             Skip devDependencies (package.json mode)
   --max <n>          Cap dependencies evaluated (default 250)
 
 ${pc.bold("Sources:")} deps.dev, OpenSSF Scorecard, socket.dev, Snyk Advisor, Build-vs-Buy.
@@ -52,42 +57,71 @@ interface AuditFlags {
   top?: string;
   direct?: boolean;
   max?: string;
+  prod?: boolean;
 }
 
 async function runAudit(args: string[], values: AuditFlags): Promise<number> {
-  const target = args[0];
-  if (!target) {
-    process.stderr.write(renderError("argent", "audit requires a package name") + "\n");
-    return 2;
-  }
-  const { name, version } = parseSpec(target);
   const top = values.top ? Number(values.top) : 25;
   const maxDeps = values.max ? Number(values.max) : undefined;
-
-  if (!values.json) {
-    process.stderr.write(
-      pc.dim(`Auditing dependencies of ${name}${version ? "@" + version : ""}…`) + "\n",
-    );
-  }
+  const target = args[0];
 
   try {
+    // No package given: audit the dependencies in the nearest package.json.
+    if (!target) {
+      const manifestPath = findManifest(process.cwd());
+      if (!manifestPath) {
+        process.stderr.write(
+          renderError("argent", "no package.json found in this directory or any parent") +
+            "\n",
+        );
+        return 2;
+      }
+      const manifest = loadManifest(manifestPath, !values.prod);
+      if (!values.json) {
+        process.stderr.write(
+          pc.dim(
+            `Auditing ${manifest.entries.length} dependencies from ${manifestPath}…`,
+          ) + "\n",
+        );
+      }
+      const report = await auditEntries(
+        { name: manifest.name, version: manifest.version },
+        manifest.entries,
+        { maxDeps },
+      );
+      writeAudit(report, top, values.json);
+      return 0;
+    }
+
+    const { name, version } = parseSpec(target);
+    if (!values.json) {
+      process.stderr.write(
+        pc.dim(`Auditing dependencies of ${name}${version ? "@" + version : ""}…`) + "\n",
+      );
+    }
     const report = await auditDependencies(name, {
       version,
       directOnly: values.direct,
       maxDeps,
     });
-    if (values.json) {
-      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-    } else {
-      process.stdout.write(renderAudit(report, top));
-    }
+    writeAudit(report, top, values.json);
     return 0;
   } catch (err) {
     process.stderr.write(
-      renderError(name, err instanceof Error ? err.message : String(err)) + "\n",
+      renderError(target ?? "audit", err instanceof Error ? err.message : String(err)) +
+        "\n",
     );
     return 1;
   }
+}
+
+function writeAudit(
+  report: Parameters<typeof renderAudit>[0],
+  top: number,
+  json: boolean | undefined,
+): void {
+  if (json) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  else process.stdout.write(renderAudit(report, top));
 }
 
 async function main(): Promise<number> {
@@ -101,6 +135,7 @@ async function main(): Promise<number> {
       top: { type: "string" },
       direct: { type: "boolean", default: false },
       max: { type: "string" },
+      prod: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
