@@ -1,7 +1,7 @@
 import { getJson } from "../http.js";
+import { footprintOf, makeRegistry } from "../npm.js";
 import type { Provider, ProviderFinding, ProviderResult, RiskLevel } from "../types.js";
 
-const REGISTRY = "https://registry.npmjs.org";
 const DEPSDEV = "https://api.deps.dev/v3";
 
 /**
@@ -132,21 +132,8 @@ function humanSize(bytes: number): string {
   return `${(bytes / (KB * KB)).toFixed(1)} MB`;
 }
 
-interface RegistryDoc {
-  description?: string;
-  keywords?: string[];
-  versions: Record<
-    string,
-    {
-      dependencies?: Record<string, string>;
-      keywords?: string[];
-      dist?: { unpackedSize?: number; fileCount?: number };
-    }
-  >;
-}
-
 interface DepsGraph {
-  nodes?: { relation?: string }[];
+  nodes?: { versionKey: { name: string; version: string }; relation?: string }[];
 }
 
 /**
@@ -162,10 +149,9 @@ export const reimplementabilityProvider: Provider = {
     const base = { provider: "Build-vs-Buy", url, advisory: true };
 
     try {
+      const registry = makeRegistry(ctx.fetch);
       const [reg, graph] = await Promise.all([
-        getJson<RegistryDoc>(`${REGISTRY}/${encodeURIComponent(ctx.name)}`, {
-          fetch: ctx.fetch,
-        }).catch(() => undefined),
+        registry.doc(ctx.name),
         getJson<DepsGraph>(
           `${DEPSDEV}/systems/npm/packages/${encodeURIComponent(ctx.name)}/versions/${encodeURIComponent(ctx.version)}:dependencies`,
           { fetch: ctx.fetch },
@@ -178,8 +164,15 @@ export const reimplementabilityProvider: Provider = {
       const directDeps = ver?.dependencies
         ? Object.keys(ver.dependencies).length
         : undefined;
-      const transitiveDeps = graph?.nodes
-        ? Math.max(0, graph.nodes.length - 1)
+      const nodes = graph?.nodes ?? [];
+      const transitiveDeps = nodes.length ? Math.max(0, nodes.length - 1) : undefined;
+
+      // Install footprint: own + every transitive dep's unpacked size.
+      const footprint = nodes.length
+        ? await footprintOf(
+            nodes.map((n) => n.versionKey),
+            registry,
+          )
         : undefined;
 
       const keywords = reg?.keywords ?? ver?.keywords ?? [];
@@ -209,6 +202,11 @@ export const reimplementabilityProvider: Provider = {
         findings.push({
           label: "Transitive dependencies",
           value: String(transitiveDeps),
+        });
+      if (footprint !== undefined)
+        findings.push({
+          label: "Install size (with deps)",
+          value: humanSize(footprint.bytes) + (footprint.complete ? "" : "+"),
         });
       if (sensitiveHits.length)
         findings.push({

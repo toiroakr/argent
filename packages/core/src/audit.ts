@@ -1,4 +1,5 @@
 import { getJson } from "./http.js";
+import { footprintOf, makeRegistry, type RegistryClient } from "./npm.js";
 import {
   findSensitiveTerms,
   recommendBuildVsBuy,
@@ -7,7 +8,6 @@ import {
 import { aggregate, levelFromSeverity } from "./risk.js";
 import type { RiskLevel } from "./types.js";
 
-const REGISTRY = "https://registry.npmjs.org";
 const DEPSDEV = "https://api.deps.dev/v3";
 
 export interface DepAudit {
@@ -105,19 +105,6 @@ interface Graph {
   edges?: { fromNode: number; toNode: number }[];
 }
 
-interface RegistryDoc {
-  description?: string;
-  keywords?: string[];
-  versions: Record<
-    string,
-    {
-      dependencies?: Record<string, string>;
-      keywords?: string[];
-      dist?: { unpackedSize?: number; fileCount?: number };
-    }
-  >;
-}
-
 async function resolveVersion(
   name: string,
   requested: string | undefined,
@@ -196,44 +183,6 @@ async function depRisk(
   } catch {
     return { level: "unknown", count: 0 };
   }
-}
-
-/** npm registry client with a per-run document cache (dedupes lookups). */
-interface RegistryClient {
-  doc(name: string): Promise<RegistryDoc | undefined>;
-  size(name: string, version: string): Promise<number | undefined>;
-}
-
-function makeRegistry(fetchImpl: typeof fetch): RegistryClient {
-  const cache = new Map<string, Promise<RegistryDoc | undefined>>();
-  const doc = (name: string): Promise<RegistryDoc | undefined> => {
-    let p = cache.get(name);
-    if (!p) {
-      p = getJson<RegistryDoc>(`${REGISTRY}/${encodeURIComponent(name)}`, {
-        fetch: fetchImpl,
-      }).catch(() => undefined);
-      cache.set(name, p);
-    }
-    return p;
-  };
-  const size = async (name: string, version: string): Promise<number | undefined> =>
-    (await doc(name))?.versions?.[version]?.dist?.unpackedSize;
-  return { doc, size };
-}
-
-/** Sums the unpacked sizes of a set of packages (the install footprint). */
-async function footprintOf(
-  keys: { name: string; version: string }[],
-  registry: RegistryClient,
-): Promise<{ bytes: number; complete: boolean }> {
-  const sizes = await Promise.all(keys.map((k) => registry.size(k.name, k.version)));
-  let bytes = 0;
-  let complete = true;
-  for (const s of sizes) {
-    if (typeof s === "number") bytes += s;
-    else complete = false;
-  }
-  return { bytes, complete };
 }
 
 async function depReimpl(
