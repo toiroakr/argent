@@ -18,15 +18,9 @@ export const snykProvider: Provider = {
     const base = { provider: "Snyk Advisor", url };
 
     try {
-      const html = await getText(url, {
-        fetch: ctx.fetch,
-        timeoutMs: 20_000,
-        // Identify honestly — security.snyk.io serves the page to a truthful
-        // tool UA (and its robots.txt allows it); no browser spoofing needed.
-        headers: {
-          "user-agent": "argent (+https://github.com/toiroakr/argent)",
-        },
-      });
+      // No custom User-Agent: security.snyk.io serves the page with the default
+      // fetch UA and its robots.txt allows it, so there's nothing to spoof.
+      const html = await getText(url, { fetch: ctx.fetch, timeoutMs: 20_000 });
 
       const score = extractScore(html);
 
