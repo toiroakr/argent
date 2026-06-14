@@ -19,7 +19,12 @@ export interface DepAudit {
   dev?: boolean;
   /** Transitive dependencies this package itself pulls in (within this graph). */
   transitiveDeps: number;
+  /** The package's own unpacked size (its code only). */
   unpackedSize?: number;
+  /** Install footprint: own + all transitive deps' unpacked sizes, in bytes. */
+  footprintBytes?: number;
+  /** True when some subtree sizes were unknown, so footprintBytes is a floor. */
+  footprintApprox?: boolean;
   advisoryCount: number;
   /** Worst advisory severity (or "low" when clean, "unknown" on lookup error). */
   severity: RiskLevel;
@@ -130,8 +135,8 @@ async function resolveVersion(
   return def.versionKey.version;
 }
 
-/** Counts nodes reachable from `start` (excluding itself) over the dep graph. */
-function transitiveCount(adj: Map<number, number[]>, start: number): number {
+/** Node indices reachable from `start` (excluding itself) over the dep graph. */
+function reachable(adj: Map<number, number[]>, start: number): number[] {
   const seen = new Set<number>();
   const stack = [...(adj.get(start) ?? [])];
   while (stack.length) {
@@ -140,7 +145,7 @@ function transitiveCount(adj: Map<number, number[]>, start: number): number {
     seen.add(n);
     for (const m of adj.get(n) ?? []) stack.push(m);
   }
-  return seen.size;
+  return [...seen];
 }
 
 async function mapLimit<T, R>(
@@ -193,16 +198,51 @@ async function depRisk(
   }
 }
 
+/** npm registry client with a per-run document cache (dedupes lookups). */
+interface RegistryClient {
+  doc(name: string): Promise<RegistryDoc | undefined>;
+  size(name: string, version: string): Promise<number | undefined>;
+}
+
+function makeRegistry(fetchImpl: typeof fetch): RegistryClient {
+  const cache = new Map<string, Promise<RegistryDoc | undefined>>();
+  const doc = (name: string): Promise<RegistryDoc | undefined> => {
+    let p = cache.get(name);
+    if (!p) {
+      p = getJson<RegistryDoc>(`${REGISTRY}/${encodeURIComponent(name)}`, {
+        fetch: fetchImpl,
+      }).catch(() => undefined);
+      cache.set(name, p);
+    }
+    return p;
+  };
+  const size = async (name: string, version: string): Promise<number | undefined> =>
+    (await doc(name))?.versions?.[version]?.dist?.unpackedSize;
+  return { doc, size };
+}
+
+/** Sums the unpacked sizes of a set of packages (the install footprint). */
+async function footprintOf(
+  keys: { name: string; version: string }[],
+  registry: RegistryClient,
+): Promise<{ bytes: number; complete: boolean }> {
+  const sizes = await Promise.all(keys.map((k) => registry.size(k.name, k.version)));
+  let bytes = 0;
+  let complete = true;
+  for (const s of sizes) {
+    if (typeof s === "number") bytes += s;
+    else complete = false;
+  }
+  return { bytes, complete };
+}
+
 async function depReimpl(
   name: string,
   version: string,
   transitiveDeps: number,
-  fetchImpl: typeof fetch,
+  registry: RegistryClient,
 ): Promise<{ verdict: DepAudit["verdict"]; sensitive: boolean; unpackedSize?: number }> {
-  const reg = await getJson<RegistryDoc>(
-    `${REGISTRY}/${encodeURIComponent(name)}`,
-    { fetch: fetchImpl },
-  ).catch(() => undefined);
+  const reg = await registry.doc(name);
   const v = reg?.versions?.[version];
   const unpackedSize = v?.dist?.unpackedSize;
   const fileCount = v?.dist?.fileCount;
@@ -219,6 +259,12 @@ async function depReimpl(
   return { verdict: verdict.verdict, sensitive: sensitiveHits.length > 0, unpackedSize };
 }
 
+function humanBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function buildReasons(d: Omit<DepAudit, "reasons" | "dropScore">): string[] {
   const reasons: string[] = [];
   if (d.advisoryCount > 0)
@@ -227,8 +273,13 @@ function buildReasons(d: Omit<DepAudit, "reasons" | "dropScore">): string[] {
   else if (d.verdict === "reimplement") reasons.push("tiny, likely reimplementable");
   else if (d.verdict === "consider") reasons.push("fairly small, vendorable");
   else if (d.verdict === "keep") reasons.push("non-trivial to replace");
-  if (d.transitiveDeps > 0)
-    reasons.push(`pulls ${d.transitiveDeps} transitive dep(s)`);
+  if (d.transitiveDeps > 0) {
+    const fp =
+      d.footprintBytes !== undefined
+        ? `, ~${humanBytes(d.footprintBytes)}${d.footprintApprox ? "+" : ""} installed`
+        : "";
+    reasons.push(`pulls ${d.transitiveDeps} dep(s)${fp}`);
+  }
   return reasons;
 }
 
@@ -267,20 +318,29 @@ export async function auditDependencies(
   const total = deps.length;
   const maxDeps = options.maxDeps ?? 250;
   const limited = deps.slice(0, maxDeps);
+  const registry = makeRegistry(fetchImpl);
 
   const ranking = await mapLimit(
     limited,
     options.concurrency ?? 8,
-    ({ node, index }): Promise<DepAudit> =>
-      assembleDep(
+    async ({ node, index }): Promise<DepAudit> => {
+      const sub = reachable(adj, index);
+      // Footprint = own + every transitive dep's unpacked size (the weight
+      // you'd actually shed by dropping this dependency).
+      const keys = [node, ...sub.map((i) => nodes[i]!)].map((n) => n.versionKey);
+      const footprint = await footprintOf(keys, registry);
+      return assembleDep(
         {
           name: node.versionKey.name,
           version: node.versionKey.version,
           direct: node.relation === "DIRECT",
         },
-        transitiveCount(adj, index),
+        sub.length,
+        footprint,
+        registry,
         fetchImpl,
-      ),
+      );
+    },
   );
 
   sortRanking(ranking);
@@ -307,11 +367,13 @@ function sortRanking(ranking: DepAudit[]): void {
 async function assembleDep(
   entry: { name: string; version: string; direct: boolean; dev?: boolean },
   transitiveDeps: number,
+  footprint: { bytes: number; complete: boolean } | undefined,
+  registry: RegistryClient,
   fetchImpl: typeof fetch,
 ): Promise<DepAudit> {
   const [risk, reimpl] = await Promise.all([
     depRisk(entry.name, entry.version, fetchImpl),
-    depReimpl(entry.name, entry.version, transitiveDeps, fetchImpl),
+    depReimpl(entry.name, entry.version, transitiveDeps, registry),
   ]);
 
   const partial: Omit<DepAudit, "reasons" | "dropScore"> = {
@@ -321,6 +383,8 @@ async function assembleDep(
     dev: entry.dev,
     transitiveDeps,
     unpackedSize: reimpl.unpackedSize,
+    footprintBytes: footprint?.bytes,
+    footprintApprox: footprint ? !footprint.complete : undefined,
     advisoryCount: risk.count,
     severity: risk.level,
     verdict: reimpl.verdict,
@@ -332,20 +396,20 @@ async function assembleDep(
   return { ...partial, dropScore: score, reasons: buildReasons(partial) };
 }
 
-/** Total transitive dependencies of a single package (its whole graph). */
-async function depTransitiveCount(
+/** Fetches a single package's resolved dependency graph nodes (self included). */
+async function depGraphNodes(
   name: string,
   version: string,
   fetchImpl: typeof fetch,
-): Promise<number> {
+): Promise<GraphNode[]> {
   try {
     const graph = await getJson<Graph>(
       `${DEPSDEV}/systems/npm/packages/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}:dependencies`,
       { fetch: fetchImpl },
     );
-    return Math.max(0, (graph.nodes ?? []).length - 1);
+    return graph.nodes ?? [];
   } catch {
-    return 0;
+    return [];
   }
 }
 
@@ -371,17 +435,27 @@ export async function auditEntries(
 
   const maxDeps = options.maxDeps ?? 250;
   const limited = entries.slice(0, maxDeps);
+  const registry = makeRegistry(fetchImpl);
 
   const results = await mapLimit(
     limited,
     options.concurrency ?? 8,
     async (entry): Promise<DepAudit | null> => {
       try {
-        const version = entry.version ?? (await resolveVersion(entry.name, undefined, fetchImpl));
-        const transitiveDeps = await depTransitiveCount(entry.name, version, fetchImpl);
+        const version =
+          entry.version ?? (await resolveVersion(entry.name, undefined, fetchImpl));
+        const nodes = await depGraphNodes(entry.name, version, fetchImpl);
+        // Sum the dep's whole subtree; fall back to just itself if the graph is
+        // unavailable so the own size is still counted.
+        const keys = nodes.length
+          ? nodes.map((n) => n.versionKey)
+          : [{ name: entry.name, version }];
+        const footprint = await footprintOf(keys, registry);
         return assembleDep(
           { name: entry.name, version, direct: true, dev: entry.dev },
-          transitiveDeps,
+          Math.max(0, nodes.length - 1),
+          footprint,
+          registry,
           fetchImpl,
         );
       } catch {

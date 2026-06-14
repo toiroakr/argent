@@ -115,6 +115,12 @@ function cell(plain: string, width: number, paint?: (s: string) => string): stri
   return paint ? paint(padded) : padded;
 }
 
+function humanBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
 export function renderAudit(report: AuditReport, top: number): string {
   const { target } = report;
   const lines: string[] = [];
@@ -143,26 +149,32 @@ export function renderAudit(report: AuditReport, top: number): string {
   const rows = shown.map((d) => ({
     d,
     pkg: `${d.name}@${d.version}${d.dev ? " (dev)" : d.direct ? "" : " ·"}`,
+    // Install size with deps (the weight you'd shed by dropping it).
+    size:
+      d.footprintBytes !== undefined
+        ? humanBytes(d.footprintBytes) + (d.footprintApprox ? "+" : "")
+        : "?",
     risk: d.advisoryCount === 0 ? "clean" : `${d.severity}(${d.advisoryCount})`,
   }));
   const pkgW = Math.max(7, ...rows.map((r) => r.pkg.length));
+  const sizeW = Math.max(6, ...rows.map((r) => r.size.length));
   const riskW = Math.max(4, ...rows.map((r) => r.risk.length));
 
   lines.push(
     pc.dim(
-      `  ${"drop".padEnd(4)}  ${"package".padEnd(pkgW)}  ${"risk".padEnd(riskW)}  ${"action".padEnd(11)}  why`,
+      `  ${"drop".padEnd(4)}  ${"package".padEnd(pkgW)}  ${"size↓".padEnd(sizeW)}  ${"risk".padEnd(riskW)}  ${"action".padEnd(11)}  why`,
     ),
   );
 
-  for (const { d, pkg, risk } of rows) {
+  for (const { d, pkg, size, risk } of rows) {
     const drop = paintDropValue(d.dropScore, String(d.dropScore).padStart(4));
     const riskPaint = d.advisoryCount === 0 ? pc.dim : paintRiskColor(d.severity);
     lines.push(
-      `  ${drop}  ${pkg.padEnd(pkgW)}  ${cell(risk, riskW, riskPaint)}  ${cell(
-        d.verdict,
-        11,
-        VERDICT_COLOR[d.verdict],
-      )}  ${pc.dim(d.reasons[0] ?? "")}`,
+      `  ${drop}  ${pkg.padEnd(pkgW)}  ${cell(size, sizeW, pc.dim)}  ${cell(
+        risk,
+        riskW,
+        riskPaint,
+      )}  ${cell(d.verdict, 11, VERDICT_COLOR[d.verdict])}  ${pc.dim(d.reasons[0] ?? "")}`,
     );
   }
   if (report.ranking.length > shown.length) {
@@ -171,7 +183,8 @@ export function renderAudit(report: AuditReport, top: number): string {
   lines.push("");
   lines.push(
     pc.dim(
-      "  drop = risk × removability (higher = better to escape). · = transitive dep.",
+      "  drop = risk × removability (higher = better to escape). " +
+        "size↓ = install size incl. deps (+ = partial). · = transitive dep.",
     ),
   );
   lines.push("");
