@@ -65,35 +65,50 @@ const SEVERITY_SCORE: Record<RiskLevel, number> = {
   unknown: 0,
 };
 
-/** How easy/worthwhile it is to remove the dependency (0-100). */
-function removability(verdict: DepAudit["verdict"], sensitive: boolean): number {
-  if (sensitive) return 5;
-  switch (verdict) {
-    case "reimplement":
-      return 100;
-    case "consider":
-      return 60;
-    case "keep":
-      return 15;
-    default:
-      return 40;
-  }
+const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
+
+/** Maps `v` to 0..1 on a log scale between `lo` and `hi`. */
+function logScale(v: number, lo: number, hi: number): number {
+  if (v <= lo) return 0;
+  return clamp01((Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)));
+}
+
+export interface DropInputs {
+  sensitive: boolean;
+  /** The dependency's own unpacked size in bytes. */
+  ownBytes?: number;
+  /** Install footprint incl. transitive deps, in bytes. */
+  footprintBytes?: number;
+  transitiveDeps: number;
 }
 
 /**
- * dropScore weights actual risk against how removable the dependency is, so the
- * top of the ranking is "risky AND realistic to drop" — the most actionable
- * wins for improving the parent package's supply-chain posture.
+ * dropScore (0-100): purely an ADOPTION signal — how worthwhile it is to escape
+ * this dependency, ignoring vulnerabilities. Known advisories are rare and
+ * dangerous, so they're handled as a separate axis (surfaced first in the
+ * ranking and shown in their own column), not blended into this number.
  *
- * `severityScore` is the numeric risk contribution (0 when the dependency has
- * no advisories, even though its display level is "low").
+ * It combines two continuous reasons to drop a dep, so neighbouring packages
+ * get distinct scores instead of clustering on a few buckets:
+ *
+ *   - inline  — its own code is small enough to just reimplement/inline
+ *   - weight  — dropping it sheds a lot of surface (many transitive deps / MBs)
  */
-export function scoreDrop(
-  severityScore: number,
-  verdict: DepAudit["verdict"],
-  sensitive: boolean,
-): number {
-  return Math.round(0.55 * severityScore + 0.45 * removability(verdict, sensitive));
+export function scoreDrop(i: DropInputs): number {
+  // inline: small own code (and not security-sensitive) = easy to reimplement.
+  const inline = i.sensitive
+    ? 0.1
+    : i.ownBytes === undefined
+      ? 0.45
+      : 1 - logScale(i.ownBytes, 2_000, 2_000_000); // 2KB → 1, 2MB → 0
+
+  // weight: how much trust surface / install size dropping it removes.
+  const depW = clamp01(i.transitiveDeps / 25);
+  const sizeW =
+    i.footprintBytes === undefined ? 0 : logScale(i.footprintBytes, 10_000, 20_000_000);
+  const weight = clamp01(0.5 * depW + 0.5 * sizeW);
+
+  return Math.round(100 * clamp01(0.55 * inline + 0.45 * weight));
 }
 
 interface GraphNode {
@@ -246,10 +261,18 @@ export async function auditDependencies(
 
   const version = await resolveVersion(name, options.version, fetchImpl);
 
+  // deps.dev doesn't have a resolved graph for every package (e.g. some scoped
+  // or private-registry-published ones return 404). Fall back to auditing the
+  // direct dependencies declared in the npm manifest instead of failing.
   const graph = await getJson<Graph>(
     `${DEPSDEV}/systems/npm/packages/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}:dependencies`,
     { fetch: fetchImpl },
-  );
+  ).catch(() => undefined);
+
+  if (!graph || !(graph.nodes ?? []).length) {
+    return auditFromManifest(name, version, fetchImpl, options);
+  }
+
   const nodes = graph.nodes ?? [];
 
   const adj = new Map<number, number[]>();
@@ -303,11 +326,37 @@ export async function auditDependencies(
   };
 }
 
+/**
+ * Fallback when deps.dev has no resolved graph: audit the direct dependencies
+ * declared in the package's own npm manifest (versions resolved to latest).
+ */
+async function auditFromManifest(
+  name: string,
+  version: string,
+  fetchImpl: typeof fetch,
+  options: AuditOptions,
+): Promise<AuditReport> {
+  const registry = makeRegistry(fetchImpl);
+  const doc = await registry.doc(name);
+  const deps = doc?.versions?.[version]?.dependencies ?? {};
+  const entries: AuditEntry[] = Object.keys(deps).map((n) => ({ name: n }));
+  const report = await auditEntries({ name, version }, entries, {
+    fetch: fetchImpl,
+    maxDeps: options.maxDeps,
+    concurrency: options.concurrency,
+  });
+  // totalDependencies here reflects direct deps only (no transitive graph).
+  return report;
+}
+
 function sortRanking(ranking: DepAudit[]): void {
+  // Vulnerabilities are a separate, urgent axis: any dep with a known advisory
+  // floats to the top (worst severity first), then the rest rank by dropScore.
   ranking.sort(
     (a, b) =>
-      b.dropScore - a.dropScore ||
+      (b.advisoryCount > 0 ? 1 : 0) - (a.advisoryCount > 0 ? 1 : 0) ||
       SEVERITY_SCORE[b.severity] - SEVERITY_SCORE[a.severity] ||
+      b.dropScore - a.dropScore ||
       a.name.localeCompare(b.name),
   );
 }
@@ -339,9 +388,12 @@ async function assembleDep(
     verdict: reimpl.verdict,
     sensitive: reimpl.sensitive,
   };
-  // Clean deps contribute no risk even though their display level is "low".
-  const severityScore = risk.count === 0 ? 0 : SEVERITY_SCORE[risk.level];
-  const score = scoreDrop(severityScore, reimpl.verdict, reimpl.sensitive);
+  const score = scoreDrop({
+    sensitive: reimpl.sensitive,
+    ownBytes: reimpl.unpackedSize,
+    footprintBytes: footprint?.bytes,
+    transitiveDeps,
+  });
   return { ...partial, dropScore: score, reasons: buildReasons(partial) };
 }
 

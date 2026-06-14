@@ -161,7 +161,7 @@ function renderAudit(report: AuditReport): string {
       <div class="report-head">
         <h2>${escape(target.name)}<span class="ver">@${escape(target.version)}</span></h2>
       </div>
-      <p class="repo">${report.totalDependencies} dependencies${capped}. Ranked by how worthwhile it is to drop each one — <code>drop = risk × removability</code>. <code>size↓</code> = install size incl. deps. · = transitive.</p>
+      <p class="repo">${report.totalDependencies} dependencies${capped}. <code>drop</code> = adoption signal (inline-ability + weight you'd shed); deps with known advisories are a separate axis, listed first. <code>size↓</code> = install size incl. deps. · = transitive.</p>
       <table class="audit">
         <thead><tr><th>drop</th><th>package</th><th>size↓</th><th>risk</th><th>action</th><th>why</th></tr></thead>
         <tbody>${shown.map(depRow).join("")}</tbody>
@@ -174,7 +174,7 @@ function renderAudit(report: AuditReport): string {
 function summarizeAudit(report: AuditReport): string {
   const lines = [
     `Dependency audit of ${report.target.name}@${report.target.version} — ${report.totalDependencies} dependencies.`,
-    `Top drop candidates (dropScore = risk × removability; higher = better to escape):`,
+    `dropScore is an adoption signal (how inline-able + how much install weight it sheds); higher = more worth escaping. Known advisories are a separate, urgent axis (call those out first).`,
   ];
   for (const d of report.ranking.slice(0, 12)) {
     const risk = d.advisoryCount === 0 ? "clean" : `${d.severity} (${d.advisoryCount} advisory)`;

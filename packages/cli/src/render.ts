@@ -183,7 +183,8 @@ export function renderAudit(report: AuditReport, top: number): string {
   lines.push("");
   lines.push(
     pc.dim(
-      "  drop = risk × removability (higher = better to escape). " +
+      "  drop = inline-ability + weight shed (adoption only). " +
+        "Deps with known advisories are a separate axis, listed first. " +
         "size↓ = install size incl. deps (+ = partial). · = transitive dep.",
     ),
   );
