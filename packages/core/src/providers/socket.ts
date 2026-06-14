@@ -1,20 +1,27 @@
-import { getJson } from "../http.js";
+import { postText } from "../http.js";
 import { levelFromScore } from "../risk.js";
 import type { Provider, ProviderFinding, ProviderResult } from "../types.js";
 
-const BASE = "https://api.socket.dev/v0";
+// Current PURL batch endpoint (successor to the deprecated /score route).
+// Returns NDJSON, one component per line.
+const ENDPOINT = "https://api.socket.dev/v0/purl?alerts=false";
 
 interface SocketScore {
-  // Each category exposes a 0..1 score; higher is safer.
-  supplyChainRisk?: { score: number };
-  quality?: { score: number };
-  maintenance?: { score: number };
-  vulnerability?: { score: number };
-  license?: { score: number };
+  // Each metric is a 0..1 score; higher is safer. `overall` is provided directly.
+  overall?: number;
+  supplyChain?: number;
+  vulnerability?: number;
+  maintenance?: number;
+  quality?: number;
+  license?: number;
+}
+
+interface SocketComponent {
+  score?: SocketScore;
 }
 
 const CATEGORIES: { key: keyof SocketScore; label: string }[] = [
-  { key: "supplyChainRisk", label: "Supply chain" },
+  { key: "supplyChain", label: "Supply chain" },
   { key: "vulnerability", label: "Vulnerability" },
   { key: "maintenance", label: "Maintenance" },
   { key: "quality", label: "Quality" },
@@ -52,29 +59,38 @@ export const socketProvider: Provider = {
     }
 
     try {
-      const data = await getJson<SocketScore>(
-        `${BASE}/npm/${encodeURIComponent(ctx.name)}/${encodeURIComponent(ctx.version)}/score`,
-        {
-          fetch: ctx.fetch,
-          headers: {
-            authorization: `Basic ${base64(`${ctx.config.socketApiKey}:`)}`,
-          },
+      const purl = `pkg:npm/${ctx.name}@${ctx.version}`;
+      const text = await postText(ENDPOINT, JSON.stringify({ components: [{ purl }] }), {
+        fetch: ctx.fetch,
+        headers: {
+          authorization: `Basic ${base64(`${ctx.config.socketApiKey}:`)}`,
+          accept: "application/x-ndjson",
         },
-      );
+      });
+
+      const line = text.split("\n").find((l) => l.trim());
+      const score = line ? (JSON.parse(line) as SocketComponent).score : undefined;
+
+      if (!score) {
+        return {
+          ...base,
+          ok: true,
+          level: "unknown",
+          summary: "socket.dev returned no scores",
+          findings: [],
+        };
+      }
 
       const findings: ProviderFinding[] = [];
-      const scores: number[] = [];
       for (const { key, label } of CATEGORIES) {
-        const raw = data[key]?.score;
+        const raw = score[key];
         if (typeof raw !== "number") continue;
         const pct = Math.round(raw * 100);
-        scores.push(pct);
         findings.push({ label, value: `${pct}/100`, level: levelFromScore(pct) });
       }
 
-      const overall = scores.length
-        ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-        : undefined;
+      const overall =
+        typeof score.overall === "number" ? Math.round(score.overall * 100) : undefined;
 
       return {
         ...base,
@@ -83,7 +99,7 @@ export const socketProvider: Provider = {
         level: overall === undefined ? "unknown" : levelFromScore(overall),
         summary:
           overall === undefined
-            ? "socket.dev returned no scores"
+            ? "socket.dev returned no overall score"
             : `socket.dev overall ${overall}/100`,
         findings,
       };

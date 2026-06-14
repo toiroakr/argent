@@ -51,3 +51,23 @@ export async function getText(url: string, opts: FetchOptions): Promise<string> 
   if (!res.ok) throw new HttpError(res.status, url);
   return await res.text();
 }
+
+/** POSTs a JSON body and returns the raw response text (e.g. JSON or NDJSON). */
+export async function postText(
+  url: string,
+  body: string,
+  opts: FetchOptions,
+): Promise<string> {
+  const res = await withTimeout(
+    opts.fetch,
+    url,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", ...opts.headers },
+      body,
+    },
+    opts.timeoutMs ?? 10_000,
+  );
+  if (!res.ok) throw new HttpError(res.status, url);
+  return await res.text();
+}
