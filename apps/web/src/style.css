@@ -41,10 +41,34 @@ header h1 {
   margin-top: 0.25rem;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
 form {
   display: flex;
   gap: 0.5rem;
-  margin: 1.5rem 0 0.5rem;
+  margin: 1rem 0 0.5rem;
 }
 
 input {
@@ -236,6 +260,137 @@ button:disabled {
   border: 1px solid var(--high);
   border-radius: 8px;
   padding: 0.75rem 1rem;
+}
+
+.dim {
+  color: var(--muted);
+}
+
+/* Audit table */
+table.audit {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin-top: 0.75rem;
+}
+
+table.audit th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+}
+
+table.audit td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+table.audit td.drop {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+td.drop.hi {
+  color: var(--high);
+}
+td.drop.mid {
+  color: var(--medium);
+}
+td.drop.lo {
+  color: var(--accent);
+}
+td.drop.min {
+  color: var(--muted);
+}
+
+td.size {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+td.verdict.reimplement {
+  color: var(--accent);
+}
+td.verdict.consider {
+  color: var(--medium);
+}
+td.verdict.keep,
+td.verdict.unknown {
+  color: var(--muted);
+}
+
+td.why {
+  font-size: 0.82rem;
+}
+
+/* AI interpretation panel */
+.ai-panel {
+  margin-top: 1.25rem;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: rgba(88, 166, 255, 0.06);
+}
+
+.ai-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.ai-title {
+  font-weight: 700;
+}
+
+.ai-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ai-btn {
+  margin-top: 0.6rem;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.ai-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.ai-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+}
+
+.ai-note.err {
+  color: var(--high);
+}
+
+.ai-output {
+  margin-top: 0.5rem;
+}
+
+.ai-output p {
+  margin: 0.4rem 0;
+}
+
+.ai-disclaimer {
+  font-size: 0.78rem;
+  color: var(--medium);
+  margin: 0.6rem 0 0;
 }
 
 footer {

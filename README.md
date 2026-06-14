@@ -123,12 +123,27 @@ devDependencies), `--max <n>` (default 250), `--json`.
 
 ### Web (GitHub Pages)
 
-A static, browser-only form: <https://toiroakr.github.io/argent/>
+A static, browser-only app: <https://toiroakr.github.io/argent/>
 
-It runs the CORS-safe sources (deps.dev + OpenSSF Scorecard) directly in your
-browser — no backend, nothing logged. Deep-link a package with
-`?pkg=express`. socket.dev and Snyk Advisor are linked out since they can't be
-called safely from the browser.
+Two tabs, both running entirely in your browser against public CORS-safe APIs —
+no backend, nothing logged:
+
+- **Check a package** — the risk report (deps.dev + OpenSSF Scorecard +
+  Build-vs-Buy). socket.dev and Snyk Advisor are linked out since they can't be
+  called safely from the browser.
+- **Audit dependencies** — the same drop-ranking as `argent audit <pkg>`.
+
+Deep-link with `?pkg=express` and `?mode=audit`.
+
+#### ✨ On-device AI interpretation (experimental)
+
+If your browser ships Chrome's built-in
+[Prompt API](https://developer.chrome.com/docs/ai/built-in-apis) (`LanguageModel`),
+an **AI interpretation** panel appears under the results. It feeds a summary of
+the report to the **on-device** model and writes a short plain-language read +
+recommendation. Nothing leaves your device, and the output is clearly labelled
+as AI-generated and may be wrong — verify it against the data. Browsers without
+the API just show a note and the rest of the app works unchanged.
 
 ## Repository layout
 
