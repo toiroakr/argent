@@ -33,8 +33,7 @@ sources that returned data.
 
 > ℹ️ Published as the scoped package **`@toiroakr/argent`** (the bare `argent`
 > name on npm belongs to an unrelated project). The installed command is still
-> `argent`. _Not yet published_ — see [Running from source](#development) until
-> the first release.
+> `argent`.
 
 ```bash
 # one-off, no install

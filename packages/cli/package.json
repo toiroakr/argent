@@ -4,7 +4,7 @@
   "description": "Assess the risk of an npm package before you install it — deps.dev, OpenSSF Scorecard, socket.dev and Snyk Advisor in one command.",
   "type": "module",
   "bin": {
-    "argent": "./dist/index.js"
+    "argent": "dist/index.js"
   },
   "files": ["dist"],
   "keywords": [
