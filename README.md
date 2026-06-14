@@ -79,6 +79,35 @@ SOCKET_API_KEY=sk_... npx @toiroakr/argent express
 Options: `--json`, `--fail-on <low|medium|high|critical>`,
 `--socket-key <token>`, `-h/--help`.
 
+#### Dependency audit — "which deps should I drop?"
+
+Point `argent` at a package and it walks its whole resolved dependency graph
+(via deps.dev) and ranks every dependency by a **drop score**: how worthwhile it
+is to escape that dependency to improve the package's supply-chain posture.
+
+```bash
+argent audit express
+argent audit webpack --top 30      # show the top 30 candidates
+argent audit lodash --direct       # only direct dependencies
+argent audit express --json        # machine-readable ranking
+```
+
+```
+  drop  package                     risk    action       why
+    82  some-lib@1.2.3              high(1)  reimplement  1 advisory(ies), high severity; tiny
+    45  bytes@3.1.2 ·              clean    reimplement  tiny, likely reimplementable
+     2  jwa@2.0.1 ·               clean    keep         security-sensitive — hard to drop safely
+```
+
+`dropScore = risk × removability` — so the top of the list is **risky _and_
+realistic to drop** (the most actionable). A dependency with an open advisory and
+a tiny, mundane footprint scores highest; a large or security-sensitive one
+(crypto, auth, …) scores low because reimplementing it is a bad idea. `·` marks
+a transitive (indirect) dependency.
+
+audit options: `--top <n>` (default 25), `--direct`, `--max <n>` (default 250),
+`--json`.
+
 ### Web (GitHub Pages)
 
 A static, browser-only form: <https://toiroakr.github.io/argent/>

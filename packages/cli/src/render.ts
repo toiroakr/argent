@@ -1,4 +1,10 @@
-import type { ProviderResult, RiskLevel, RiskReport } from "@argent/core";
+import type {
+  AuditReport,
+  DepAudit,
+  ProviderResult,
+  RiskLevel,
+  RiskReport,
+} from "@argent/core";
 import pc from "picocolors";
 
 const LEVEL_LABEL: Record<RiskLevel, string> = {
@@ -87,4 +93,101 @@ export function renderReport(report: RiskReport): string {
 
 export function renderError(name: string, message: string): string {
   return `${pc.red("✗")} ${pc.bold(name)}  ${message}`;
+}
+
+function paintDropValue(score: number, text: string): string {
+  if (score >= 70) return pc.bold(pc.red(text));
+  if (score >= 45) return pc.yellow(text);
+  if (score >= 25) return pc.cyan(text);
+  return pc.dim(text);
+}
+
+const VERDICT_COLOR: Record<DepAudit["verdict"], (s: string) => string> = {
+  reimplement: pc.cyan,
+  consider: pc.yellow,
+  keep: pc.dim,
+  unknown: pc.dim,
+};
+
+/** Pad a plain cell to width, then apply color (so color codes don't skew it). */
+function cell(plain: string, width: number, paint?: (s: string) => string): string {
+  const padded = plain.padEnd(width);
+  return paint ? paint(padded) : padded;
+}
+
+export function renderAudit(report: AuditReport, top: number): string {
+  const { target } = report;
+  const lines: string[] = [];
+  lines.push("");
+  lines.push(
+    `${pc.bold("Dependency audit")} — ${pc.bold(target.name)}${pc.dim("@")}${target.version}`,
+  );
+  const capped =
+    report.evaluated < report.totalDependencies
+      ? ` (evaluated ${report.evaluated}, capped)`
+      : "";
+  lines.push(
+    pc.dim(
+      `${report.totalDependencies} dependencies${capped}. Ranked by how worthwhile it is to drop each one.`,
+    ),
+  );
+  lines.push("");
+
+  if (report.ranking.length === 0) {
+    lines.push(pc.green("  No dependencies — nothing to drop. 🎉"));
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  const shown = report.ranking.slice(0, top);
+  const rows = shown.map((d) => ({
+    d,
+    pkg: `${d.name}@${d.version}${d.direct ? "" : " ·"}`,
+    risk: d.advisoryCount === 0 ? "clean" : `${d.severity}(${d.advisoryCount})`,
+  }));
+  const pkgW = Math.max(7, ...rows.map((r) => r.pkg.length));
+  const riskW = Math.max(4, ...rows.map((r) => r.risk.length));
+
+  lines.push(
+    pc.dim(
+      `  ${"drop".padEnd(4)}  ${"package".padEnd(pkgW)}  ${"risk".padEnd(riskW)}  ${"action".padEnd(11)}  why`,
+    ),
+  );
+
+  for (const { d, pkg, risk } of rows) {
+    const drop = paintDropValue(d.dropScore, String(d.dropScore).padStart(4));
+    const riskPaint = d.advisoryCount === 0 ? pc.dim : paintRiskColor(d.severity);
+    lines.push(
+      `  ${drop}  ${pkg.padEnd(pkgW)}  ${cell(risk, riskW, riskPaint)}  ${cell(
+        d.verdict,
+        11,
+        VERDICT_COLOR[d.verdict],
+      )}  ${pc.dim(d.reasons[0] ?? "")}`,
+    );
+  }
+  if (report.ranking.length > shown.length) {
+    lines.push(pc.dim(`  … and ${report.ranking.length - shown.length} more`));
+  }
+  lines.push("");
+  lines.push(
+    pc.dim(
+      "  drop = risk × removability (higher = better to escape). · = transitive dep.",
+    ),
+  );
+  lines.push("");
+  return lines.join("\n");
+}
+
+function paintRiskColor(level: RiskLevel): (s: string) => string {
+  switch (level) {
+    case "low":
+      return pc.green;
+    case "medium":
+      return pc.yellow;
+    case "high":
+    case "critical":
+      return pc.red;
+    default:
+      return pc.dim;
+  }
 }
