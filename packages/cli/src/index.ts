@@ -52,8 +52,9 @@ ${pc.bold("commons:")} rank dependencies shared across multiple packages you man
   --top <n>          Show only the top N (default 25)
   --prod             Ignore devDependencies
 
-${pc.bold("Sources:")} deps.dev, OpenSSF Scorecard, socket.dev, Snyk Advisor,
-GitHub Actions (karinto), Community, Build-vs-Buy.
+${pc.bold("Sources:")} deps.dev, OpenSSF Scorecard, Supply Chain, socket.dev,
+Snyk Advisor, GitHub Actions (karinto), Community, Popularity, License,
+Build-vs-Buy.
 ${pc.dim("Set GITHUB_TOKEN to raise the GitHub API rate limit.")}
 `;
 

@@ -17,22 +17,26 @@ dependency.
 | --- | --- | :-: | :-: |
 | [deps.dev](https://deps.dev) | Known security advisories, declared licenses, source repo | ✅ | ✅ |
 | [OpenSSF Scorecard](https://securityscorecards.dev) | Heuristic security health of the source repo | ✅ | ✅ |
+| **Supply Chain** | npm integrity signals: deprecated, install scripts, build provenance, maintainer count (bus factor / takeover surface) | ✅ | ✅ |
 | [socket.dev](https://socket.dev) | Supply-chain risk from static analysis | ✅¹ | 🔗² |
 | [Snyk Advisor](https://snyk.io/advisor) | Package health score (security/popularity/maintenance/community) | ✅³ | 🔗² |
 | **GitHub Actions** ([karinto](https://github.com/toiroakr/karinto)) | Lints the repo's CI workflows (excessive permissions, dangerous triggers, unpinned actions, injection) | ✅⁴ | 🔗² |
-| **Community** | Adoption aid: is the project open to outside contributions (active, issues on, CONTRIBUTING, recent external PRs merged)? Openness also = attack surface; its security counterpart is review rigor (Scorecard's Code-Review / Branch-Protection). | ✅⁴ | 🔗² |
+| **Community** | Adoption aid: open to outside contributions? (active, issues on, CONTRIBUTING, external PRs merged, issue close time). Openness is also attack surface; its security counterpart is review rigor (Scorecard's Code-Review / Branch-Protection). | ✅⁴ | 🔗² |
+| **Popularity** | Adoption aid via [ecosyste.ms](https://ecosyste.ms): downloads + how many packages/repos depend on it. Heavy use = more eyes (earlier detection) but a bigger target. | ✅⁵ | 🔗² |
+| **License** | Legal/adoption aid: classifies the license (permissive / weak / strong / network copyleft / none) | ✅ | ✅ |
 | **Build-vs-Buy** | Adoption aid: is it small & mundane enough to reimplement yourself (e.g. with AI) instead of taking the dependency? | ✅ | ✅ |
 
 > ¹ Requires a `SOCKET_API_KEY`. ² Needs a server/CLI (API key or CORS), so the
 > web app links out instead. ³ Scraped from the public Advisor page (best-effort).
 > ⁴ Uses the GitHub API — set `GITHUB_TOKEN` to avoid the 60-req/hour
-> unauthenticated rate limit.
+> unauthenticated rate limit. ⁵ ecosyste.ms isn't CORS-enabled, so CLI-only.
 
 Results are normalized to a shared scale — `low` · `medium` · `high` ·
-`critical` · `unknown` — and the report's overall level is the worst across all
-sources that returned data. **GitHub Actions** is a security signal but capped at
-`medium` (CI hygiene is indirect for a consumer); **Community** is advisory (an
-adoption axis), so neither dominates nor — for Community — feeds the overall.
+`critical` · `unknown` — and the report's overall level is the worst across the
+**security** sources (deps.dev, Scorecard, Supply Chain, socket.dev, Snyk,
+GitHub Actions). **GitHub Actions** is capped at `medium` (CI hygiene is indirect
+for a consumer). The **adoption/legal axes** — Community, Popularity, License,
+Build-vs-Buy — are advisory (marked 💡): shown but excluded from the overall.
 
 ### Build-vs-Buy (adoption aid)
 

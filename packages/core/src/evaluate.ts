@@ -1,9 +1,12 @@
 import { evaluateDepsDev } from "./providers/depsdev.js";
 import { communityProvider, githubActionsProvider } from "./providers/github.js";
+import { licenseProvider } from "./providers/license.js";
+import { popularityProvider } from "./providers/popularity.js";
 import { reimplementabilityProvider } from "./providers/reimplementability.js";
 import { scorecardProvider } from "./providers/scorecard.js";
 import { snykProvider } from "./providers/snyk.js";
 import { socketProvider } from "./providers/socket.js";
+import { supplyChainProvider } from "./providers/supplychain.js";
 import { aggregate } from "./risk.js";
 import type {
   EvalConfig,
@@ -16,10 +19,13 @@ import type {
 /** Providers that run after deps.dev resolves the version + repo. */
 const SECONDARY: Provider[] = [
   scorecardProvider,
+  supplyChainProvider,
   socketProvider,
   snykProvider,
   githubActionsProvider,
   communityProvider,
+  popularityProvider,
+  licenseProvider,
   reimplementabilityProvider,
 ];
 

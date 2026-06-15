@@ -159,6 +159,25 @@ interface PullRequest {
   merged_at: string | null;
   author_association: string;
 }
+interface Issue {
+  created_at: string;
+  closed_at: string | null;
+  /** Present when the "issue" is actually a pull request — excluded. */
+  pull_request?: unknown;
+}
+
+/** Median days-to-close over recently closed real issues (PRs excluded). */
+function medianCloseDays(issues: Issue[]): number | undefined {
+  const days = issues
+    .filter((i) => !i.pull_request && i.closed_at)
+    .map((i) => (Date.parse(i.closed_at!) - Date.parse(i.created_at)) / 86_400_000)
+    .filter((d) => Number.isFinite(d) && d >= 0)
+    .sort((a, b) => a - b);
+  if (days.length === 0) return undefined;
+  const mid = Math.floor(days.length / 2);
+  const median = days.length % 2 ? days[mid]! : (days[mid - 1]! + days[mid]!) / 2;
+  return Math.round(median);
+}
 
 const EXTERNAL = new Set(["CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "NONE", "MANNEQUIN"]);
 
@@ -181,7 +200,7 @@ export const communityProvider: Provider = {
     const repoBase = `${GH_API}/repos/${gh.owner}/${gh.repo}`;
 
     try {
-      const [repo, profile, pulls] = await Promise.all([
+      const [repo, profile, pulls, issues] = await Promise.all([
         getJson<RepoMeta>(repoBase, { fetch: ctx.fetch, headers }),
         getJson<CommunityProfile>(`${repoBase}/community/profile`, { fetch: ctx.fetch, headers }).catch(
           () => undefined,
@@ -190,12 +209,17 @@ export const communityProvider: Provider = {
           fetch: ctx.fetch,
           headers,
         }).catch(() => [] as PullRequest[]),
+        getJson<Issue[]>(`${repoBase}/issues?state=closed&sort=updated&per_page=30`, {
+          fetch: ctx.fetch,
+          headers,
+        }).catch(() => [] as Issue[]),
       ]);
 
       const externalMerged = pulls.filter(
         (p) => p.merged_at && EXTERNAL.has(p.author_association),
       ).length;
       const hasContributing = Boolean(profile?.files?.["contributing"]);
+      const closeDays = medianCloseDays(issues);
 
       const findings: ProviderFinding[] = [
         {
@@ -211,6 +235,13 @@ export const communityProvider: Provider = {
           level: externalMerged > 0 ? "low" : "medium",
         },
       ];
+      if (closeDays !== undefined) {
+        findings.push({
+          label: "Median issue close time",
+          value: `${closeDays}d`,
+          level: closeDays <= 14 ? "low" : closeDays <= 90 ? "medium" : "high",
+        });
+      }
 
       let level: RiskLevel;
       let summary: string;
