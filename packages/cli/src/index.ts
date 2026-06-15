@@ -52,7 +52,9 @@ ${pc.bold("commons:")} rank dependencies shared across multiple packages you man
   --top <n>          Show only the top N (default 25)
   --prod             Ignore devDependencies
 
-${pc.bold("Sources:")} deps.dev, OpenSSF Scorecard, socket.dev, Snyk Advisor, Build-vs-Buy.
+${pc.bold("Sources:")} deps.dev, OpenSSF Scorecard, socket.dev, Snyk Advisor,
+GitHub Actions (karinto), Community, Build-vs-Buy.
+${pc.dim("Set GITHUB_TOKEN to raise the GitHub API rate limit.")}
 `;
 
 const SEVERITY: RiskLevel[] = ["low", "medium", "high", "critical"];
@@ -250,11 +252,13 @@ async function main(): Promise<number> {
   }
 
   const socketApiKey = values["socket-key"] ?? process.env.SOCKET_API_KEY;
+  const githubToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
 
   if (!values.json) {
     process.stderr.write(
       pc.dim(`Sources: ${availableProviders(false).join(", ")}`) +
         (socketApiKey ? "" : pc.dim("  (socket.dev disabled — no API key)")) +
+        (githubToken ? "" : pc.dim("  (GitHub unauthenticated — set GITHUB_TOKEN)")) +
         "\n",
     );
   }
@@ -263,7 +267,7 @@ async function main(): Promise<number> {
     positionals.map(async (spec) => {
       const { name, version } = parseSpec(spec);
       try {
-        return await evaluatePackage(name, { version, socketApiKey });
+        return await evaluatePackage(name, { version, socketApiKey, githubToken });
       } catch (err) {
         return {
           error: err instanceof Error ? err.message : String(err),

@@ -19,14 +19,20 @@ dependency.
 | [OpenSSF Scorecard](https://securityscorecards.dev) | Heuristic security health of the source repo | ✅ | ✅ |
 | [socket.dev](https://socket.dev) | Supply-chain risk from static analysis | ✅¹ | 🔗² |
 | [Snyk Advisor](https://snyk.io/advisor) | Package health score (security/popularity/maintenance/community) | ✅³ | 🔗² |
+| **GitHub Actions** ([karinto](https://github.com/toiroakr/karinto)) | Lints the repo's CI workflows (excessive permissions, dangerous triggers, unpinned actions, injection) | ✅⁴ | 🔗² |
+| **Community** | Adoption aid: is the project open to outside contributions (active, issues on, CONTRIBUTING, recent external PRs merged)? | ✅⁴ | 🔗² |
 | **Build-vs-Buy** | Adoption aid: is it small & mundane enough to reimplement yourself (e.g. with AI) instead of taking the dependency? | ✅ | ✅ |
 
 > ¹ Requires a `SOCKET_API_KEY`. ² Needs a server/CLI (API key or CORS), so the
 > web app links out instead. ³ Scraped from the public Advisor page (best-effort).
+> ⁴ Uses the GitHub API — set `GITHUB_TOKEN` to avoid the 60-req/hour
+> unauthenticated rate limit.
 
 Results are normalized to a shared scale — `low` · `medium` · `high` ·
 `critical` · `unknown` — and the report's overall level is the worst across all
-sources that returned data.
+sources that returned data. **GitHub Actions** is a security signal but capped at
+`medium` (CI hygiene is indirect for a consumer); **Community** is advisory (an
+adoption axis), so neither dominates nor — for Community — feeds the overall.
 
 ### Build-vs-Buy (adoption aid)
 

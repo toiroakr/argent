@@ -287,7 +287,7 @@ function setMode(next: Mode): void {
   submit.textContent = next === "check" ? "Check" : "Audit";
   sources.textContent =
     next === "check"
-      ? `In the browser we query: ${availableProviders(true).join(", ")}. socket.dev & Snyk Advisor require the CLI.`
+      ? `In the browser we query: ${availableProviders(true).join(", ")}. socket.dev, Snyk Advisor, GitHub Actions & Community require the CLI.`
       : "Audits the package's full resolved dependency graph (deps.dev + npm registry) and ranks which deps are worth dropping.";
 }
 

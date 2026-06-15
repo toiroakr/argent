@@ -1,4 +1,5 @@
 import { evaluateDepsDev } from "./providers/depsdev.js";
+import { communityProvider, githubActionsProvider } from "./providers/github.js";
 import { reimplementabilityProvider } from "./providers/reimplementability.js";
 import { scorecardProvider } from "./providers/scorecard.js";
 import { snykProvider } from "./providers/snyk.js";
@@ -17,6 +18,8 @@ const SECONDARY: Provider[] = [
   scorecardProvider,
   socketProvider,
   snykProvider,
+  githubActionsProvider,
+  communityProvider,
   reimplementabilityProvider,
 ];
 
@@ -50,6 +53,7 @@ export async function evaluatePackage(
 
   const config: EvalConfig = {
     socketApiKey: options.socketApiKey,
+    githubToken: options.githubToken,
     browser: options.browser ?? false,
   };
 

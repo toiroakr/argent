@@ -77,6 +77,8 @@ export interface EvalContext {
 export interface EvalConfig {
   /** socket.dev API token; without it the socket provider is skipped. */
   socketApiKey?: string;
+  /** GitHub token; raises the API rate limit for the GitHub-based providers. */
+  githubToken?: string;
   /** Whether the run is happening in a browser (disables CORS-unsafe calls). */
   browser?: boolean;
 }
