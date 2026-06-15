@@ -3,24 +3,7 @@ import { REGISTRY, type RegistryDoc } from "../npm.js";
 import type { Provider, ProviderFinding, ProviderResult, RiskLevel } from "../types.js";
 
 /** npm lifecycle scripts that run on `npm install` — a classic malware vector. */
-const INSTALL_HOOKS = ["preinstall", "install", "postinstall"] as const;
-
-interface FullDoc extends RegistryDoc {
-  maintainers?: { name?: string }[];
-  versions: RegistryDoc["versions"] &
-    Record<
-      string,
-      {
-        scripts?: Record<string, string>;
-        deprecated?: string;
-        dist?: {
-          unpackedSize?: number;
-          fileCount?: number;
-          attestations?: { provenance?: unknown };
-        };
-      }
-    >;
-}
+export const INSTALL_HOOKS = ["preinstall", "install", "postinstall"] as const;
 
 /**
  * Integrity / supply-chain signals straight from the npm registry: whether the
@@ -34,7 +17,7 @@ export const supplyChainProvider: Provider = {
     const url = `https://www.npmjs.com/package/${ctx.name}/v/${ctx.version}`;
     const base = { provider: "Supply Chain", url };
     try {
-      const doc = await getJson<FullDoc>(`${REGISTRY}/${encodeURIComponent(ctx.name)}`, {
+      const doc = await getJson<RegistryDoc>(`${REGISTRY}/${encodeURIComponent(ctx.name)}`, {
         fetch: ctx.fetch,
       });
       const v = doc.versions?.[ctx.version];

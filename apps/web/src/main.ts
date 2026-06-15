@@ -128,16 +128,19 @@ function depRow(d: DepAudit): string {
     d.footprintBytes !== undefined
       ? humanBytes(d.footprintBytes) + (d.footprintApprox ? "+" : "")
       : "?";
-  const risk =
-    d.advisoryCount === 0
+  const risk = d.deprecated
+    ? `${badge("high")}<span class="dim">deprecated</span>`
+    : d.advisoryCount === 0
       ? `<span class="dim">clean</span>`
       : `${badge(d.severity)}<span class="dim">×${d.advisoryCount}</span>`;
   const drop =
     d.dropScore >= 70 ? "hi" : d.dropScore >= 45 ? "mid" : d.dropScore >= 25 ? "lo" : "min";
+  // ⚙ marks a dependency that runs install scripts.
+  const install = d.installScript ? ` <span class="dim" title="runs install scripts">⚙</span>` : "";
   return `
     <tr>
       <td class="drop ${drop}">${d.dropScore}</td>
-      <td class="dep">${escape(d.name)}<span class="dim">@${escape(d.version)}${tag}</span></td>
+      <td class="dep">${escape(d.name)}<span class="dim">@${escape(d.version)}${tag}</span>${install}</td>
       <td class="size">${size}</td>
       <td class="risk">${risk}</td>
       <td class="verdict ${d.verdict}">${d.verdict}</td>

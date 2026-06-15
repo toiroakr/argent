@@ -5,12 +5,21 @@ export const REGISTRY = "https://registry.npmjs.org";
 export interface RegistryDoc {
   description?: string;
   keywords?: string[];
+  license?: string | { type?: string };
+  maintainers?: { name?: string }[];
   versions: Record<
     string,
     {
       dependencies?: Record<string, string>;
       keywords?: string[];
-      dist?: { unpackedSize?: number; fileCount?: number };
+      scripts?: Record<string, string>;
+      deprecated?: string;
+      license?: string | { type?: string };
+      dist?: {
+        unpackedSize?: number;
+        fileCount?: number;
+        attestations?: { provenance?: unknown };
+      };
     }
   >;
 }

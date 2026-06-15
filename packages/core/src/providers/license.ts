@@ -30,12 +30,7 @@ export function classifyLicense(id: string | undefined): {
   return { category: "unknown", level: "unknown" };
 }
 
-interface FullDoc extends RegistryDoc {
-  license?: string | { type?: string };
-  versions: RegistryDoc["versions"] & Record<string, { license?: string | { type?: string } }>;
-}
-
-function readLicense(doc: FullDoc, version: string): string | undefined {
+function readLicense(doc: RegistryDoc, version: string): string | undefined {
   const raw = doc.versions?.[version]?.license ?? doc.license;
   if (!raw) return undefined;
   return typeof raw === "string" ? raw : raw.type;
@@ -52,7 +47,7 @@ export const licenseProvider: Provider = {
   async evaluate(ctx): Promise<ProviderResult> {
     const base = { provider: "License", advisory: true };
     try {
-      const doc = await getJson<FullDoc>(`${REGISTRY}/${encodeURIComponent(ctx.name)}`, {
+      const doc = await getJson<RegistryDoc>(`${REGISTRY}/${encodeURIComponent(ctx.name)}`, {
         fetch: ctx.fetch,
       });
       const id = readLicense(doc, ctx.version);

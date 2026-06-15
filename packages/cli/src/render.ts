@@ -132,12 +132,17 @@ function auditTable(deps: DepAudit[], top: number): string[] {
   const shown = deps.slice(0, top);
   const rows = shown.map((d) => ({
     d,
-    pkg: `${d.name}@${d.version}${d.direct ? "" : " ·"}`,
+    // ⚙ marks a dependency that runs install scripts.
+    pkg: `${d.name}@${d.version}${d.direct ? "" : " ·"}${d.installScript ? " ⚙" : ""}`,
     size:
       d.footprintBytes !== undefined
         ? humanBytes(d.footprintBytes) + (d.footprintApprox ? "+" : "")
         : "?",
-    risk: d.advisoryCount === 0 ? "clean" : `${d.severity}(${d.advisoryCount})`,
+    risk: d.deprecated
+      ? "deprecated"
+      : d.advisoryCount === 0
+        ? "clean"
+        : `${d.severity}(${d.advisoryCount})`,
   }));
   const pkgW = Math.max(7, ...rows.map((r) => r.pkg.length));
   const sizeW = Math.max(6, ...rows.map((r) => r.size.length));
@@ -150,7 +155,11 @@ function auditTable(deps: DepAudit[], top: number): string[] {
   );
   for (const { d, pkg, size, risk } of rows) {
     const drop = paintDropValue(d.dropScore, String(d.dropScore).padStart(4));
-    const riskPaint = d.advisoryCount === 0 ? pc.dim : paintRiskColor(d.severity);
+    const riskPaint = d.deprecated
+      ? pc.red
+      : d.advisoryCount === 0
+        ? pc.dim
+        : paintRiskColor(d.severity);
     lines.push(
       `  ${drop}  ${pkg.padEnd(pkgW)}  ${cell(size, sizeW, pc.dim)}  ${cell(
         risk,
@@ -208,8 +217,8 @@ export function renderAudit(report: AuditReport, top: number): string {
   lines.push(
     pc.dim(
       "  drop = how cheaply you can escape it: small + self-contained own code scores high; " +
-        "a big EXCLUSIVE subtree LOWERS it. Advisories are a separate axis, listed first. " +
-        "size↓ = install weight you'd uniquely shed (shared deps excluded; + = partial).",
+        "a big EXCLUSIVE subtree LOWERS it. Deprecated deps & advisories are a separate axis, " +
+        "listed first; ⚙ = runs install scripts. size↓ = install weight you'd uniquely shed.",
     ),
   );
   lines.push("");

@@ -126,9 +126,11 @@ package's full resolved dependency graph.
   the tree provides (the "weight you'd shed" is usually illusory). So both the
   transitive dep count and the install footprint **lower** the score. It
   deliberately does **not** include vulnerabilities.
-- **`risk`** — known advisories (from deps.dev). These are rare and dangerous,
-  so any dep with one is a separate, urgent axis: it's **listed first** and shown
-  in its own column, rather than diluted into the drop score.
+- **`risk`** — known advisories (from deps.dev) **and deprecations**. These are
+  the urgent, separate axis: any dep that's vulnerable or **deprecated** is
+  **listed first** rather than diluted into the drop score. A `⚙` next to a
+  package marks one that **runs install scripts** (preinstall/install/postinstall)
+  — a transitive dep you might not realize executes code on `npm install`.
 
 The **`size↓`** column is the **exclusive** install footprint — what you'd
 *uniquely* shed by dropping the dependency: its own size plus only the packages
@@ -164,6 +166,7 @@ devDependencies), `--max <n>` (default 250), `--json`.
   "totalDeps": 43,           "totalFootprintBytes": 1655078, // total subtree (incl. shared)
   "totalFootprintApprox": true,
   "advisoryCount": 0, "severity": "low", "sensitive": false,
+  "deprecated": false, "installScript": false,
   "reasons": ["fairly small, vendorable", "uniquely pulls 5 dep(s), ~445 KB+"]
 }
 ```

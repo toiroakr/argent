@@ -5,6 +5,7 @@ import {
   recommendBuildVsBuy,
   type BuildVsBuyVerdict,
 } from "./providers/reimplementability.js";
+import { INSTALL_HOOKS } from "./providers/supplychain.js";
 import { aggregate, levelFromSeverity } from "./risk.js";
 import type { RiskLevel } from "./types.js";
 
@@ -38,6 +39,10 @@ export interface DepAudit {
   advisoryCount: number;
   /** Worst advisory severity (or "low" when clean, "unknown" on lookup error). */
   severity: RiskLevel;
+  /** The dependency is deprecated on npm — a strong reason to replace it. */
+  deprecated?: boolean;
+  /** Runs an install lifecycle script (preinstall/install/postinstall). */
+  installScript?: boolean;
   verdict: BuildVsBuyVerdict["verdict"];
   sensitive: boolean;
   /** 0-100; higher = stronger candidate to drop to improve the parent. */
@@ -230,7 +235,13 @@ async function depReimpl(
   version: string,
   transitiveDeps: number,
   registry: RegistryClient,
-): Promise<{ verdict: DepAudit["verdict"]; sensitive: boolean; unpackedSize?: number }> {
+): Promise<{
+  verdict: DepAudit["verdict"];
+  sensitive: boolean;
+  unpackedSize?: number;
+  deprecated: boolean;
+  installScript: boolean;
+}> {
   const reg = await registry.doc(name);
   const v = reg?.versions?.[version];
   const unpackedSize = v?.dist?.unpackedSize;
@@ -245,7 +256,13 @@ async function depReimpl(
     transitiveDeps,
     sensitiveHits,
   });
-  return { verdict: verdict.verdict, sensitive: sensitiveHits.length > 0, unpackedSize };
+  return {
+    verdict: verdict.verdict,
+    sensitive: sensitiveHits.length > 0,
+    unpackedSize,
+    deprecated: typeof v?.deprecated === "string",
+    installScript: INSTALL_HOOKS.some((h) => v?.scripts?.[h]),
+  };
 }
 
 function humanBytes(bytes: number): string {
@@ -256,8 +273,10 @@ function humanBytes(bytes: number): string {
 
 function buildReasons(d: Omit<DepAudit, "reasons" | "dropScore">): string[] {
   const reasons: string[] = [];
+  if (d.deprecated) reasons.push("deprecated — replace it");
   if (d.advisoryCount > 0)
     reasons.push(`${d.advisoryCount} advisory(ies), ${d.severity} severity`);
+  if (d.installScript) reasons.push("runs install scripts");
   if (d.sensitive) reasons.push("security-sensitive — hard to drop safely");
   else if (d.verdict === "reimplement") reasons.push("tiny, likely reimplementable");
   else if (d.verdict === "consider") reasons.push("fairly small, vendorable");
@@ -402,12 +421,14 @@ async function auditFromManifest(
 }
 
 function sortRanking(ranking: DepAudit[]): void {
-  // Vulnerabilities are a separate, urgent axis: any dep with a known advisory
-  // floats to the top (worst severity first), then the rest rank by dropScore.
+  // Advisories and deprecations are separate, urgent axes: deps carrying either
+  // float to the top, then the rest rank by dropScore.
+  const urgent = (d: DepAudit) => (d.advisoryCount > 0 || d.deprecated ? 1 : 0);
   ranking.sort(
     (a, b) =>
-      (b.advisoryCount > 0 ? 1 : 0) - (a.advisoryCount > 0 ? 1 : 0) ||
+      urgent(b) - urgent(a) ||
       SEVERITY_SCORE[b.severity] - SEVERITY_SCORE[a.severity] ||
+      (b.deprecated ? 1 : 0) - (a.deprecated ? 1 : 0) ||
       b.dropScore - a.dropScore ||
       a.name.localeCompare(b.name),
   );
@@ -446,6 +467,8 @@ async function assembleDep(
     totalFootprintApprox: total ? !total.footprint.complete : undefined,
     advisoryCount: risk.count,
     severity: risk.level,
+    deprecated: reimpl.deprecated,
+    installScript: reimpl.installScript,
     verdict: reimpl.verdict,
     sensitive: reimpl.sensitive,
   };
