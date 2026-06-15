@@ -19,7 +19,11 @@ interface ScorecardResponse {
 /** Checks whose failure is most relevant to supply-chain risk. */
 const HIGHLIGHT = new Set([
   "Maintained",
+  // Open known vulnerabilities (OSV) — the public, accessible stand-in for the
+  // GitHub Security tab's alert backlog, which is admin-only via the API.
   "Vulnerabilities",
+  // Whether there's a vulnerability-disclosure process (SECURITY.md).
+  "Security-Policy",
   "Dangerous-Workflow",
   "Token-Permissions",
   // The security counterpart of accepting outside contributions: whether they
