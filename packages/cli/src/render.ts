@@ -121,6 +121,45 @@ function humanBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+/** Renders one ranked table (header + rows + overflow note) for a dep group. */
+function auditTable(deps: DepAudit[], top: number): string[] {
+  const lines: string[] = [];
+  const shown = deps.slice(0, top);
+  const rows = shown.map((d) => ({
+    d,
+    pkg: `${d.name}@${d.version}${d.direct ? "" : " ·"}`,
+    size:
+      d.footprintBytes !== undefined
+        ? humanBytes(d.footprintBytes) + (d.footprintApprox ? "+" : "")
+        : "?",
+    risk: d.advisoryCount === 0 ? "clean" : `${d.severity}(${d.advisoryCount})`,
+  }));
+  const pkgW = Math.max(7, ...rows.map((r) => r.pkg.length));
+  const sizeW = Math.max(6, ...rows.map((r) => r.size.length));
+  const riskW = Math.max(4, ...rows.map((r) => r.risk.length));
+
+  lines.push(
+    pc.dim(
+      `  ${"drop".padEnd(4)}  ${"package".padEnd(pkgW)}  ${"size↓".padEnd(sizeW)}  ${"risk".padEnd(riskW)}  ${"action".padEnd(11)}  why`,
+    ),
+  );
+  for (const { d, pkg, size, risk } of rows) {
+    const drop = paintDropValue(d.dropScore, String(d.dropScore).padStart(4));
+    const riskPaint = d.advisoryCount === 0 ? pc.dim : paintRiskColor(d.severity);
+    lines.push(
+      `  ${drop}  ${pkg.padEnd(pkgW)}  ${cell(size, sizeW, pc.dim)}  ${cell(
+        risk,
+        riskW,
+        riskPaint,
+      )}  ${cell(d.verdict, 11, VERDICT_COLOR[d.verdict])}  ${pc.dim(d.reasons[0] ?? "")}`,
+    );
+  }
+  if (deps.length > shown.length) {
+    lines.push(pc.dim(`  … and ${deps.length - shown.length} more`));
+  }
+  return lines;
+}
+
 export function renderAudit(report: AuditReport, top: number): string {
   const { target } = report;
   const lines: string[] = [];
@@ -145,47 +184,27 @@ export function renderAudit(report: AuditReport, top: number): string {
     return lines.join("\n");
   }
 
-  const shown = report.ranking.slice(0, top);
-  const rows = shown.map((d) => ({
-    d,
-    pkg: `${d.name}@${d.version}${d.dev ? " (dev)" : d.direct ? "" : " ·"}`,
-    // Install size with deps (the weight you'd shed by dropping it).
-    size:
-      d.footprintBytes !== undefined
-        ? humanBytes(d.footprintBytes) + (d.footprintApprox ? "+" : "")
-        : "?",
-    risk: d.advisoryCount === 0 ? "clean" : `${d.severity}(${d.advisoryCount})`,
-  }));
-  const pkgW = Math.max(7, ...rows.map((r) => r.pkg.length));
-  const sizeW = Math.max(6, ...rows.map((r) => r.size.length));
-  const riskW = Math.max(4, ...rows.map((r) => r.risk.length));
+  // dependencies and devDependencies have different risk profiles (devDeps are
+  // build-time, not shipped), so they're ranked in separate sections.
+  const prod = report.ranking.filter((d) => !d.dev);
+  const dev = report.ranking.filter((d) => d.dev);
 
-  lines.push(
-    pc.dim(
-      `  ${"drop".padEnd(4)}  ${"package".padEnd(pkgW)}  ${"size↓".padEnd(sizeW)}  ${"risk".padEnd(riskW)}  ${"action".padEnd(11)}  why`,
-    ),
-  );
+  if (dev.length && prod.length) {
+    lines.push(pc.bold("  dependencies"));
+    lines.push(...auditTable(prod, top));
+    lines.push("");
+    lines.push(pc.bold("  devDependencies"));
+    lines.push(...auditTable(dev, top));
+  } else {
+    lines.push(...auditTable(report.ranking, top));
+  }
 
-  for (const { d, pkg, size, risk } of rows) {
-    const drop = paintDropValue(d.dropScore, String(d.dropScore).padStart(4));
-    const riskPaint = d.advisoryCount === 0 ? pc.dim : paintRiskColor(d.severity);
-    lines.push(
-      `  ${drop}  ${pkg.padEnd(pkgW)}  ${cell(size, sizeW, pc.dim)}  ${cell(
-        risk,
-        riskW,
-        riskPaint,
-      )}  ${cell(d.verdict, 11, VERDICT_COLOR[d.verdict])}  ${pc.dim(d.reasons[0] ?? "")}`,
-    );
-  }
-  if (report.ranking.length > shown.length) {
-    lines.push(pc.dim(`  … and ${report.ranking.length - shown.length} more`));
-  }
   lines.push("");
   lines.push(
     pc.dim(
-      "  drop = inline-ability + weight shed (adoption only). " +
-        "Deps with known advisories are a separate axis, listed first. " +
-        "size↓ = install size incl. deps (+ = partial). · = transitive dep.",
+      "  drop = how cheaply you can escape it: small + self-contained own code scores high; " +
+        "a big dep subtree LOWERS it (hard to drop, weight rarely shed). " +
+        "Advisories are a separate axis, listed first. size↓ = install size incl. deps (+ = partial).",
     ),
   );
   lines.push("");

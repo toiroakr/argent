@@ -83,32 +83,36 @@ export interface DropInputs {
 }
 
 /**
- * dropScore (0-100): purely an ADOPTION signal — how worthwhile it is to escape
- * this dependency, ignoring vulnerabilities. Known advisories are rare and
- * dangerous, so they're handled as a separate axis (surfaced first in the
- * ranking and shown in their own column), not blended into this number.
+ * dropScore (0-100): an ADOPTION signal — how cheaply and worthwhile it is to
+ * actually escape this dependency, ignoring vulnerabilities (those are a
+ * separate axis: deps with advisories are surfaced first and shown in their own
+ * column, not blended in here).
  *
- * It combines two continuous reasons to drop a dep, so neighbouring packages
- * get distinct scores instead of clustering on a few buckets:
+ * A dependency is realistically droppable when it is **small AND self-contained**
+ * — a few lines of mundane code you can just inline. A large dependency subtree
+ * works *against* this: a thin wrapper over a big tree isn't easy to drop, because
+ * removing the package still leaves you needing the functionality its tree
+ * provides (so the "weight you'd shed" is usually illusory). So both the
+ * transitive dep count and the install footprint LOWER the score.
  *
- *   - inline  — its own code is small enough to just reimplement/inline
- *   - weight  — dropping it sheds a lot of surface (many transitive deps / MBs)
+ *   - own code small        → inline-able
+ *   - few/no transitive deps → self-contained, nothing to re-expand
+ *   - small install footprint → little real functionality delegated
  */
 export function scoreDrop(i: DropInputs): number {
-  // inline: small own code (and not security-sensitive) = easy to reimplement.
-  const inline = i.sensitive
-    ? 0.1
-    : i.ownBytes === undefined
-      ? 0.45
-      : 1 - logScale(i.ownBytes, 2_000, 2_000_000); // 2KB → 1, 2MB → 0
+  // Reimplementing security-sensitive code is a bad idea regardless of size.
+  if (i.sensitive) return 10;
 
-  // weight: how much trust surface / install size dropping it removes.
-  const depW = clamp01(i.transitiveDeps / 25);
-  const sizeW =
-    i.footprintBytes === undefined ? 0 : logScale(i.footprintBytes, 10_000, 20_000_000);
-  const weight = clamp01(0.5 * depW + 0.5 * sizeW);
+  const ownFactor =
+    i.ownBytes === undefined ? 0.5 : 1 - logScale(i.ownBytes, 2_000, 500_000); // 2KB→1, 500KB→0
+  const selfContained = 1 - clamp01(i.transitiveDeps / 8); // 0 deps→1, 8+→0
+  const lightFactor =
+    i.footprintBytes === undefined
+      ? ownFactor
+      : 1 - logScale(i.footprintBytes, 10_000, 2_000_000); // 10KB→1, 2MB→0
 
-  return Math.round(100 * clamp01(0.55 * inline + 0.45 * weight));
+  const ease = clamp01(0.4 * ownFactor + 0.35 * selfContained + 0.25 * lightFactor);
+  return Math.round(100 * ease);
 }
 
 interface GraphNode {

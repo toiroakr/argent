@@ -11,7 +11,11 @@ const base = {
 // dropScore is an adoption signal only — vulnerabilities are a separate axis,
 // so they are intentionally NOT an input here.
 
-test("a thin wrapper dragging a big tree outranks a pure tiny leaf", () => {
+test("a tiny self-contained utility is the best drop candidate", () => {
+  expect(scoreDrop({ ...base, ownBytes: 2_000, footprintBytes: 5_000 })).toBeGreaterThan(70);
+});
+
+test("a thin wrapper over a big tree is NOT easy to drop", () => {
   const leaf = scoreDrop(base);
   const wrapper = scoreDrop({
     ...base,
@@ -19,21 +23,22 @@ test("a thin wrapper dragging a big tree outranks a pure tiny leaf", () => {
     footprintBytes: 1_600_000,
     transitiveDeps: 43,
   });
-  expect(wrapper).toBeGreaterThan(leaf);
+  // The wrapper's own code is small, but its big subtree makes it hard to escape.
+  expect(wrapper).toBeLessThan(leaf);
 });
 
-test("clean deps still produce a spread (not one bucket)", () => {
-  const tiny = scoreDrop(base);
-  const heavy = scoreDrop({ ...base, footprintBytes: 2_000_000, transitiveDeps: 20 });
-  expect(heavy).not.toBe(tiny);
+test("more transitive deps lower the score (less self-contained)", () => {
+  const fewer = scoreDrop({ ...base, transitiveDeps: 1 });
+  const more = scoreDrop({ ...base, transitiveDeps: 10, footprintBytes: 800_000 });
+  expect(more).toBeLessThan(fewer);
 });
 
-test("security-sensitive lowers the inline component", () => {
-  expect(scoreDrop({ ...base, sensitive: true })).toBeLessThan(scoreDrop(base));
-});
-
-test("large own code is less inline-able than tiny own code", () => {
+test("large own code is harder to reimplement", () => {
   const tiny = scoreDrop({ ...base, ownBytes: 3_000 });
-  const big = scoreDrop({ ...base, ownBytes: 1_500_000 });
+  const big = scoreDrop({ ...base, ownBytes: 400_000 });
   expect(tiny).toBeGreaterThan(big);
+});
+
+test("security-sensitive scores low regardless of size", () => {
+  expect(scoreDrop({ ...base, sensitive: true })).toBeLessThanOrEqual(15);
 });

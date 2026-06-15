@@ -267,6 +267,11 @@ button:disabled {
 }
 
 /* Audit table */
+.audit-caption {
+  margin: 1.1rem 0 0.1rem;
+  font-size: 0.95rem;
+}
+
 table.audit {
   width: 100%;
   border-collapse: collapse;

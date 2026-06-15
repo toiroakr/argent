@@ -101,26 +101,33 @@ package's full resolved dependency graph.
 
 ```
   drop  package                size↓   risk     action       why
-    71  body-parser@2.2.2      1.6MB+  clean    keep         pulls 43 dep(s), ~1.6MB+ installed
-    47  qs@6.15.2              736KB   clean    keep         non-trivial to replace
-    42  bytes@3.1.2 ·         12KB    clean    reimplement  tiny, likely reimplementable
+    97  is-promise@4.0.0 ·     3KB     clean    reimplement  tiny, likely reimplementable
+    91  ms@2.1.3 ·            7KB     clean    reimplement  tiny, likely reimplementable
+    19  body-parser@2.2.2      1.6MB+  clean    keep         non-trivial to replace
 ```
 
 **Two separate axes:**
 
-- **`drop`** — an *adoption* score (0-100): how worthwhile it is to escape the
-  dependency, combining how **inline-able** its own code is (small + mundane →
-  easy to reimplement) and how much **weight** dropping it sheds (transitive dep
-  count + install size). It deliberately does **not** include vulnerabilities.
+- **`drop`** — an *adoption* score (0-100): how cheaply and worthwhile it is to
+  actually **escape** the dependency. It's high when the package is **small and
+  self-contained** — a few lines of mundane code you can just inline. A large
+  dependency subtree works *against* it: a thin wrapper over a big tree isn't
+  easy to drop, because removing it still leaves you needing the functionality
+  the tree provides (the "weight you'd shed" is usually illusory). So both the
+  transitive dep count and the install footprint **lower** the score. It
+  deliberately does **not** include vulnerabilities.
 - **`risk`** — known advisories (from deps.dev). These are rare and dangerous,
-  so any dep with one is treated as a separate, urgent axis: it's **listed first**
-  and shown in its own column, rather than diluted into the drop score.
+  so any dep with one is a separate, urgent axis: it's **listed first** and shown
+  in its own column, rather than diluted into the drop score.
 
 The **`size↓`** column is the install footprint **including the dependency's own
-subtree** — the weight you'd actually shed by dropping it (`+` = some sub-package
-sizes were unknown, so it's a floor). A tiny wrapper that drags in a large tree
-(`body-parser` ≈ 39 KB on its own but ≈ 1.6 MB with deps) is far more worth
-escaping than its own size suggests.
+subtree** (`+` = some sub-package sizes were unknown, so it's a floor) — useful
+context, and the reason a heavy wrapper like `body-parser` (≈ 39 KB itself but
+≈ 1.6 MB with its tree) ranks *low*: you can't realistically inline 43 packages'
+worth of behaviour.
+
+When auditing a local `package.json`, **dependencies** and **devDependencies**
+are ranked in separate sections (devDeps are build-time, not shipped).
 
 > If deps.dev has no resolved graph for a package (some scoped/privately-published
 > ones), the audit falls back to its npm manifest's direct dependencies.

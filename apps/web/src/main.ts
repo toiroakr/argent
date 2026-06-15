@@ -119,7 +119,7 @@ function summarizeReport(report: RiskReport): string {
 // ------------------------------------------------------------------ audit mode
 
 function depRow(d: DepAudit): string {
-  const tag = d.dev ? " (dev)" : d.direct ? "" : " ·";
+  const tag = d.direct ? "" : " ·";
   const size =
     d.footprintBytes !== undefined
       ? humanBytes(d.footprintBytes) + (d.footprintApprox ? "+" : "")
@@ -141,32 +141,45 @@ function depRow(d: DepAudit): string {
     </tr>`;
 }
 
+function auditTable(deps: DepAudit[], caption?: string): string {
+  if (deps.length === 0) return "";
+  const shown = deps.slice(0, 40);
+  const more =
+    deps.length > shown.length
+      ? `<p class="repo">… and ${deps.length - shown.length} more</p>`
+      : "";
+  return `
+    ${caption ? `<h3 class="audit-caption">${caption}</h3>` : ""}
+    <table class="audit">
+      <thead><tr><th>drop</th><th>package</th><th>size↓</th><th>risk</th><th>action</th><th>why</th></tr></thead>
+      <tbody>${shown.map(depRow).join("")}</tbody>
+    </table>
+    ${more}`;
+}
+
 function renderAudit(report: AuditReport): string {
   const { target } = report;
   if (report.ranking.length === 0) {
     return `<div class="report"><div class="report-head"><h2>${escape(target.name)}<span class="ver">@${escape(target.version)}</span></h2></div>
       <p class="repo">No dependencies — nothing to drop. 🎉</p></div>`;
   }
-  const shown = report.ranking.slice(0, 40);
   const capped =
     report.evaluated < report.totalDependencies
       ? ` (evaluated ${report.evaluated}, capped)`
       : "";
-  const more =
-    report.ranking.length > shown.length
-      ? `<p class="repo">… and ${report.ranking.length - shown.length} more</p>`
-      : "";
+  const prod = report.ranking.filter((d) => !d.dev);
+  const dev = report.ranking.filter((d) => d.dev);
+  const tables =
+    dev.length && prod.length
+      ? auditTable(prod, "dependencies") + auditTable(dev, "devDependencies")
+      : auditTable(report.ranking);
   return `
     <div class="report">
       <div class="report-head">
         <h2>${escape(target.name)}<span class="ver">@${escape(target.version)}</span></h2>
       </div>
-      <p class="repo">${report.totalDependencies} dependencies${capped}. <code>drop</code> = adoption signal (inline-ability + weight you'd shed); deps with known advisories are a separate axis, listed first. <code>size↓</code> = install size incl. deps. · = transitive.</p>
-      <table class="audit">
-        <thead><tr><th>drop</th><th>package</th><th>size↓</th><th>risk</th><th>action</th><th>why</th></tr></thead>
-        <tbody>${shown.map(depRow).join("")}</tbody>
-      </table>
-      ${more}
+      <p class="repo">${report.totalDependencies} dependencies${capped}. <code>drop</code> = how cheaply you can escape it (small + self-contained scores high; a big dep subtree lowers it). Deps with known advisories are a separate axis, listed first. <code>size↓</code> = install size incl. deps. · = transitive.</p>
+      ${tables}
       ${aiPanelHtml()}
     </div>`;
 }
