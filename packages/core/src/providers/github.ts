@@ -150,6 +150,8 @@ interface RepoMeta {
   has_issues?: boolean;
   open_issues_count?: number;
   pushed_at?: string;
+  private?: boolean;
+  visibility?: string;
 }
 interface CommunityProfile {
   health_percentage?: number;
@@ -215,6 +217,12 @@ export const communityProvider: Provider = {
         }).catch(() => [] as Issue[]),
       ]);
 
+      // A private/internal repo isn't an open-source contribution setting, so the
+      // "external PRs" axis doesn't apply; we report it neutrally instead of
+      // penalising it. Likewise, absent PRs/issues mean "nothing to assess", not
+      // "closed off".
+      const isPublic = !repo.private && (repo.visibility ?? "public") === "public";
+      const havePulls = pulls.length > 0;
       const externalMerged = pulls.filter(
         (p) => p.merged_at && EXTERNAL.has(p.author_association),
       ).length;
@@ -227,14 +235,18 @@ export const communityProvider: Provider = {
           value: repo.archived ? "archived" : repo.disabled ? "disabled" : "active",
           level: repo.archived || repo.disabled ? "high" : "low",
         },
-        { label: "Issues", value: repo.has_issues ? "enabled" : "disabled", level: repo.has_issues ? "low" : "medium" },
+        { label: "Visibility", value: repo.visibility ?? (repo.private ? "private" : "public") },
+        { label: "Issues", value: repo.has_issues ? "enabled" : "disabled" },
         { label: "CONTRIBUTING", value: hasContributing ? "yes" : "no" },
-        {
+      ];
+      // Only meaningful for a public repo that actually has recent PRs to judge.
+      if (isPublic && havePulls) {
+        findings.push({
           label: "Recent external PRs merged",
           value: String(externalMerged),
           level: externalMerged > 0 ? "low" : "medium",
-        },
-      ];
+        });
+      }
       if (closeDays !== undefined) {
         findings.push({
           label: "Median issue close time",
@@ -248,14 +260,20 @@ export const communityProvider: Provider = {
       if (repo.archived || repo.disabled) {
         level = "high";
         summary = "Archived/disabled — unlikely to accept contributions";
+      } else if (!isPublic) {
+        level = "low";
+        summary = "Internal/private repository — outside-contribution signals don't apply";
       } else if (externalMerged > 0 || hasContributing) {
         level = "low";
         // Openness helps adoption (you could land a fix) but is also attack
         // surface — the security side is review rigor (see Scorecard Code-Review).
         summary = `Open to contributions (${externalMerged} recent external PR(s) merged) — also widens the attack surface`;
+      } else if (!havePulls) {
+        level = "low";
+        summary = "No recent PR/issue activity to assess outside contribution";
       } else {
         level = "medium";
-        summary = "Limited signs of outside contribution";
+        summary = "Recent PRs are maintainer-only — limited sign of outside contribution";
       }
 
       return { ...base, ok: true, level, summary, findings, url };
