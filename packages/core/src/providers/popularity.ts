@@ -49,10 +49,10 @@ export const popularityProvider: Provider = {
       const obscure = depPkgs < 2 && downloads < 1_000;
       const level: RiskLevel = widely ? "low" : obscure ? "medium" : "low";
       const summary = widely
-        ? `Widely used (${human(depPkgs)} dependent packages) — many eyes, but a bigger target`
+        ? `Widely used (${human(downloads)} downloads/mo, ${human(depPkgs)} dependent packages) — many eyes, but a bigger target`
         : obscure
-          ? "Rarely used — fewer eyes on it"
-          : `Used by ${human(depPkgs)} packages`;
+          ? `Rarely used (${human(downloads)} downloads/mo) — fewer eyes on it`
+          : `${human(downloads)} downloads/mo, ${human(depPkgs)} dependent packages`;
 
       return { ...base, ok: true, level, summary, findings, url };
     } catch (err) {

@@ -83,6 +83,9 @@ export interface Footprint {
  * false whenever any were missing.
  */
 export function sumSizes(sizes: (number | undefined)[]): Footprint {
+  // No packages to sum is a definite 0 (e.g. a fully-shared dep sheds nothing
+  // uniquely) — distinct from "we looked but every size was unknown".
+  if (sizes.length === 0) return { bytes: 0, complete: true };
   let total = 0;
   let known = 0;
   let missing = 0;
