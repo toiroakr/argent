@@ -285,9 +285,15 @@ function setMode(next: Mode): void {
       ? "package name, e.g. express or @scope/pkg@1.0.0"
       : "package to audit, e.g. express";
   submit.textContent = next === "check" ? "Check" : "Audit";
+  const inBrowser = availableProviders(true);
+  // Derive the CLI-only list instead of hardcoding it, so new providers don't
+  // need a manual edit here.
+  const cliOnly = availableProviders(false).filter((p) => !inBrowser.includes(p));
   sources.textContent =
     next === "check"
-      ? `In the browser we query: ${availableProviders(true).join(", ")}. socket.dev, Snyk Advisor, GitHub Actions & Community require the CLI.`
+      ? `In the browser we query: ${inBrowser.join(", ")}.${
+          cliOnly.length ? ` ${cliOnly.join(", ")} require the CLI.` : ""
+        }`
       : "Audits the package's full resolved dependency graph (deps.dev + npm registry) and ranks which deps are worth dropping.";
 }
 
