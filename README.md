@@ -139,6 +139,25 @@ are ranked in separate sections (devDeps are build-time, not shipped).
 audit options: `--top <n>` (default 25), `--direct`, `--prod` (skip
 devDependencies), `--max <n>` (default 250), `--json`.
 
+`--json` emits the full report. Each ranked dependency carries both the
+**exclusive** and **total** figures, plus the raw inputs:
+
+```jsonc
+{
+  "name": "body-parser", "version": "2.2.2",
+  "direct": true,            // dev: true for devDependencies
+  "dropScore": 38,           // adoption signal (0-100)
+  "verdict": "consider",     // reimplement | consider | keep
+  "unpackedSize": 39481,     // the package's own code
+  "transitiveDeps": 5,       "footprintBytes": 456180,    // EXCLUSIVE (uniquely shed)
+  "footprintApprox": true,
+  "totalDeps": 43,           "totalFootprintBytes": 1655078, // total subtree (incl. shared)
+  "totalFootprintApprox": true,
+  "advisoryCount": 0, "severity": "low", "sensitive": false,
+  "reasons": ["fairly small, vendorable", "uniquely pulls 5 dep(s), ~445 KB+"]
+}
+```
+
 ### Web (GitHub Pages)
 
 A static, browser-only app: <https://toiroakr.github.io/argent/>

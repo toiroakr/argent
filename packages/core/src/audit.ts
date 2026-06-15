@@ -19,6 +19,8 @@ export interface DepAudit {
   dev?: boolean;
   /** Transitive deps this dependency *exclusively* pulls (shared ones excluded). */
   transitiveDeps: number;
+  /** Total transitive deps in its resolved subtree (incl. shared ones). */
+  totalDeps?: number;
   /** The package's own unpacked size (its code only). */
   unpackedSize?: number;
   /**
@@ -29,6 +31,10 @@ export interface DepAudit {
   footprintBytes?: number;
   /** True when some subtree sizes were unknown, so footprintBytes is a floor. */
   footprintApprox?: boolean;
+  /** Total subtree install size in bytes, incl. shared deps (informational). */
+  totalFootprintBytes?: number;
+  /** True when some subtree sizes were unknown, so totalFootprintBytes is a floor. */
+  totalFootprintApprox?: boolean;
   advisoryCount: number;
   /** Worst advisory severity (or "low" when clean, "unknown" on lookup error). */
   severity: RiskLevel;
@@ -337,6 +343,15 @@ export async function auditDependencies(
         if (typeof b === "number") bytes += b;
         else complete = false;
       }
+      // Total subtree (incl. shared deps), for the JSON detail.
+      const sub = reachableAvoiding(adj, index, -1);
+      let totalBytes = 0;
+      let totalComplete = true;
+      for (const i of sub) {
+        const b = nodeBytes[i];
+        if (typeof b === "number") totalBytes += b;
+        else totalComplete = false;
+      }
       return assembleDep(
         {
           name: node.versionKey.name,
@@ -347,6 +362,7 @@ export async function auditDependencies(
         { bytes, complete },
         registry,
         fetchImpl,
+        { deps: sub.size - 1, footprint: { bytes: totalBytes, complete: totalComplete } },
       );
     },
   );
@@ -397,13 +413,19 @@ function sortRanking(ranking: DepAudit[]): void {
   );
 }
 
+interface Footprint {
+  bytes: number;
+  complete: boolean;
+}
+
 /** Builds a single DepAudit from the risk + reimplementability lookups. */
 async function assembleDep(
   entry: { name: string; version: string; direct: boolean; dev?: boolean },
   transitiveDeps: number,
-  footprint: { bytes: number; complete: boolean } | undefined,
+  footprint: Footprint | undefined,
   registry: RegistryClient,
   fetchImpl: typeof fetch,
+  total?: { deps: number; footprint: Footprint },
 ): Promise<DepAudit> {
   const [risk, reimpl] = await Promise.all([
     depRisk(entry.name, entry.version, fetchImpl),
@@ -416,9 +438,12 @@ async function assembleDep(
     direct: entry.direct,
     dev: entry.dev,
     transitiveDeps,
+    totalDeps: total?.deps,
     unpackedSize: reimpl.unpackedSize,
     footprintBytes: footprint?.bytes,
     footprintApprox: footprint ? !footprint.complete : undefined,
+    totalFootprintBytes: total?.footprint.bytes,
+    totalFootprintApprox: total ? !total.footprint.complete : undefined,
     advisoryCount: risk.count,
     severity: risk.level,
     verdict: reimpl.verdict,
@@ -511,21 +536,27 @@ export async function auditEntries(
     if (!r) return null;
     const ownId = id({ name: r.entry.name, version: r.version });
     const shared = r.entry.dev ? allShared : prodShared;
-    const exclusive = r.keys.filter((k) => (shared.get(id(k)) ?? 0) <= 1);
-    const sizes = await Promise.all(exclusive.map((k) => registry.size(k.name, k.version)));
-    let bytes = 0;
-    let complete = true;
-    for (const s of sizes) {
-      if (typeof s === "number") bytes += s;
-      else complete = false;
-    }
+    const uniqueKeys = [...new Map(r.keys.map((k) => [id(k), k])).values()];
+    const sumSizes = async (keys: { name: string; version: string }[]) => {
+      const sizes = await Promise.all(keys.map((k) => registry.size(k.name, k.version)));
+      let bytes = 0;
+      let complete = true;
+      for (const s of sizes) {
+        if (typeof s === "number") bytes += s;
+        else complete = false;
+      }
+      return { bytes, complete };
+    };
+    const exclusive = uniqueKeys.filter((k) => (shared.get(id(k)) ?? 0) <= 1);
+    const [excl, tot] = await Promise.all([sumSizes(exclusive), sumSizes(uniqueKeys)]);
     const exclusiveDeps = exclusive.filter((k) => id(k) !== ownId).length;
     return assembleDep(
       { name: r.entry.name, version: r.version, direct: true, dev: r.entry.dev },
       exclusiveDeps,
-      { bytes, complete },
+      excl,
       registry,
       fetchImpl,
+      { deps: uniqueKeys.length - 1, footprint: tot },
     );
   });
 
