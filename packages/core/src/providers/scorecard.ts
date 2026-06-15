@@ -22,6 +22,9 @@ const HIGHLIGHT = new Set([
   "Vulnerabilities",
   "Dangerous-Workflow",
   "Token-Permissions",
+  // The security counterpart of accepting outside contributions: whether they
+  // get reviewed / land on protected branches (guards against malicious PRs).
+  "Code-Review",
   "Branch-Protection",
   "Signed-Releases",
 ]);

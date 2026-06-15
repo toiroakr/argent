@@ -20,7 +20,7 @@ dependency.
 | [socket.dev](https://socket.dev) | Supply-chain risk from static analysis | ✅¹ | 🔗² |
 | [Snyk Advisor](https://snyk.io/advisor) | Package health score (security/popularity/maintenance/community) | ✅³ | 🔗² |
 | **GitHub Actions** ([karinto](https://github.com/toiroakr/karinto)) | Lints the repo's CI workflows (excessive permissions, dangerous triggers, unpinned actions, injection) | ✅⁴ | 🔗² |
-| **Community** | Adoption aid: is the project open to outside contributions (active, issues on, CONTRIBUTING, recent external PRs merged)? | ✅⁴ | 🔗² |
+| **Community** | Adoption aid: is the project open to outside contributions (active, issues on, CONTRIBUTING, recent external PRs merged)? Openness also = attack surface; its security counterpart is review rigor (Scorecard's Code-Review / Branch-Protection). | ✅⁴ | 🔗² |
 | **Build-vs-Buy** | Adoption aid: is it small & mundane enough to reimplement yourself (e.g. with AI) instead of taking the dependency? | ✅ | ✅ |
 
 > ¹ Requires a `SOCKET_API_KEY`. ² Needs a server/CLI (API key or CORS), so the

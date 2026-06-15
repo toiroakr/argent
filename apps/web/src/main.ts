@@ -58,8 +58,12 @@ const ADVISORY_TAG: Record<RiskLevel, string> = {
 
 function renderProvider(r: ProviderResult): string {
   const isAdvisory = r.advisory && r.ok;
+  // REIMPLEMENT?/CONSIDER/KEEP is Build-vs-Buy's verdict; other advisory
+  // providers (e.g. Community) just get a neutral 💡 marker.
   const score = isAdvisory
-    ? `<span class="advisory-tag">💡 ${ADVISORY_TAG[r.level]}</span>`
+    ? r.provider === "Build-vs-Buy"
+      ? `<span class="advisory-tag">💡 ${ADVISORY_TAG[r.level]}</span>`
+      : `<span class="advisory-tag">💡</span>`
     : r.score !== undefined
       ? `<span class="score">${r.score}/100</span>`
       : "";

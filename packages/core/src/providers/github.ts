@@ -219,7 +219,9 @@ export const communityProvider: Provider = {
         summary = "Archived/disabled — unlikely to accept contributions";
       } else if (externalMerged > 0 || hasContributing) {
         level = "low";
-        summary = `Open to contributions (${externalMerged} recent external PR(s) merged)`;
+        // Openness helps adoption (you could land a fix) but is also attack
+        // surface — the security side is review rigor (see Scorecard Code-Review).
+        summary = `Open to contributions (${externalMerged} recent external PR(s) merged) — also widens the attack surface`;
       } else {
         level = "medium";
         summary = "Limited signs of outside contribution";

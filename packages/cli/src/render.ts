@@ -73,9 +73,13 @@ export function renderReport(report: RiskReport): string {
   lines.push("");
 
   for (const r of report.results) {
+    // The REIMPLEMENT?/CONSIDER/KEEP verdict is specific to Build-vs-Buy; other
+    // advisory providers (e.g. Community) just show 💡 + their summary.
     const tag =
       r.advisory && r.ok
-        ? ` ${ADVISORY_TAG[r.level]}`
+        ? r.provider === "Build-vs-Buy"
+          ? ` ${ADVISORY_TAG[r.level]}`
+          : ""
         : r.score !== undefined
           ? pc.dim(` [${r.score}/100]`)
           : "";
