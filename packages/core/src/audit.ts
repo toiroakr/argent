@@ -1,5 +1,5 @@
 import { getJson } from "./http.js";
-import { footprintOf, makeRegistry, type RegistryClient } from "./npm.js";
+import { makeRegistry, type RegistryClient } from "./npm.js";
 import {
   findSensitiveTerms,
   recommendBuildVsBuy,
@@ -17,11 +17,15 @@ export interface DepAudit {
   direct: boolean;
   /** True when this came from devDependencies (manifest audit only). */
   dev?: boolean;
-  /** Transitive dependencies this package itself pulls in (within this graph). */
+  /** Transitive deps this dependency *exclusively* pulls (shared ones excluded). */
   transitiveDeps: number;
   /** The package's own unpacked size (its code only). */
   unpackedSize?: number;
-  /** Install footprint: own + all transitive deps' unpacked sizes, in bytes. */
+  /**
+   * Exclusive install footprint in bytes: own size + the unpacked size of every
+   * package that is only reachable through this dependency. Packages shared with
+   * other deps are excluded, because dropping this one wouldn't remove them.
+   */
   footprintBytes?: number;
   /** True when some subtree sizes were unknown, so footprintBytes is a floor. */
   footprintApprox?: boolean;
@@ -141,17 +145,28 @@ async function resolveVersion(
   return def.versionKey.version;
 }
 
-/** Node indices reachable from `start` (excluding itself) over the dep graph. */
-function reachable(adj: Map<number, number[]>, start: number): number[] {
-  const seen = new Set<number>();
-  const stack = [...(adj.get(start) ?? [])];
+/**
+ * Nodes reachable from `from`, never traversing into `blocked` (-1 = nothing
+ * blocked). The returned set includes `from`. Used to find which nodes a
+ * dependency *exclusively* pulls: nodes reachable normally but not when its
+ * node is blocked are the ones only it brings in (its dominator set).
+ */
+function reachableAvoiding(
+  adj: Map<number, number[]>,
+  from: number,
+  blocked: number,
+): Set<number> {
+  const seen = new Set<number>([from]);
+  const stack = [from];
   while (stack.length) {
     const n = stack.pop()!;
-    if (n === start || seen.has(n)) continue;
-    seen.add(n);
-    for (const m of adj.get(n) ?? []) stack.push(m);
+    for (const m of adj.get(n) ?? []) {
+      if (m === blocked || seen.has(m)) continue;
+      seen.add(m);
+      stack.push(m);
+    }
   }
-  return [...seen];
+  return seen;
 }
 
 async function mapLimit<T, R>(
@@ -244,9 +259,9 @@ function buildReasons(d: Omit<DepAudit, "reasons" | "dropScore">): string[] {
   if (d.transitiveDeps > 0) {
     const fp =
       d.footprintBytes !== undefined
-        ? `, ~${humanBytes(d.footprintBytes)}${d.footprintApprox ? "+" : ""} installed`
+        ? `, ~${humanBytes(d.footprintBytes)}${d.footprintApprox ? "+" : ""}`
         : "";
-    reasons.push(`pulls ${d.transitiveDeps} dep(s)${fp}`);
+    reasons.push(`uniquely pulls ${d.transitiveDeps} dep(s)${fp}`);
   }
   return reasons;
 }
@@ -296,23 +311,40 @@ export async function auditDependencies(
   const limited = deps.slice(0, maxDeps);
   const registry = makeRegistry(fetchImpl);
 
+  const root = Math.max(0, nodes.findIndex((n) => n.relation === "SELF"));
+  const allReachable = reachableAvoiding(adj, root, -1);
+  // Prefetch every node's unpacked size once (registry cache dedupes by name).
+  const nodeBytes = await mapLimit(nodes, options.concurrency ?? 8, (n) =>
+    registry.size(n.versionKey.name, n.versionKey.version),
+  );
+
   const ranking = await mapLimit(
     limited,
     options.concurrency ?? 8,
-    async ({ node, index }): Promise<DepAudit> => {
-      const sub = reachable(adj, index);
-      // Footprint = own + every transitive dep's unpacked size (the weight
-      // you'd actually shed by dropping this dependency).
-      const keys = [node, ...sub.map((i) => nodes[i]!)].map((n) => n.versionKey);
-      const footprint = await footprintOf(keys, registry);
+    ({ node, index }): Promise<DepAudit> => {
+      // Exclusive footprint: nodes that become unreachable from the root when
+      // this dep is blocked — i.e. what it *uniquely* pulls. Shared deps (still
+      // reachable via others) are excluded, since dropping this one wouldn't
+      // remove them anyway.
+      const without = reachableAvoiding(adj, root, index);
+      let bytes = 0;
+      let complete = true;
+      let exclusiveDeps = 0;
+      for (const i of allReachable) {
+        if (without.has(i)) continue;
+        if (i !== index) exclusiveDeps++;
+        const b = nodeBytes[i];
+        if (typeof b === "number") bytes += b;
+        else complete = false;
+      }
       return assembleDep(
         {
           name: node.versionKey.name,
           version: node.versionKey.version,
           direct: node.relation === "DIRECT",
         },
-        sub.length,
-        footprint,
+        exclusiveDeps,
+        { bytes, complete },
         registry,
         fetchImpl,
       );
@@ -441,33 +473,61 @@ export async function auditEntries(
   const maxDeps = options.maxDeps ?? 250;
   const limited = entries.slice(0, maxDeps);
   const registry = makeRegistry(fetchImpl);
+  const concurrency = options.concurrency ?? 8;
+  const id = (k: { name: string; version: string }) => `${k.name}@${k.version}`;
 
-  const results = await mapLimit(
-    limited,
-    options.concurrency ?? 8,
-    async (entry): Promise<DepAudit | null> => {
-      try {
-        const version =
-          entry.version ?? (await resolveVersion(entry.name, undefined, fetchImpl));
-        const nodes = await depGraphNodes(entry.name, version, fetchImpl);
-        // Sum the dep's whole subtree; fall back to just itself if the graph is
-        // unavailable so the own size is still counted.
-        const keys = nodes.length
-          ? nodes.map((n) => n.versionKey)
-          : [{ name: entry.name, version }];
-        const footprint = await footprintOf(keys, registry);
-        return assembleDep(
-          { name: entry.name, version, direct: true, dev: entry.dev },
-          Math.max(0, nodes.length - 1),
-          footprint,
-          registry,
-          fetchImpl,
-        );
-      } catch {
-        return null;
-      }
-    },
-  );
+  // Phase 1: resolve each entry and fetch its full subtree.
+  const resolved = await mapLimit(limited, concurrency, async (entry) => {
+    try {
+      const version =
+        entry.version ?? (await resolveVersion(entry.name, undefined, fetchImpl));
+      const nodes = await depGraphNodes(entry.name, version, fetchImpl);
+      const keys = nodes.length
+        ? nodes.map((n) => n.versionKey)
+        : [{ name: entry.name, version }];
+      return { entry, version, keys };
+    } catch {
+      return null;
+    }
+  });
+
+  // Count how many direct deps' subtrees each package appears in — packages
+  // shared across deps are installed anyway, so they don't count as "shed".
+  // Production deps are counted against the production graph only (sharing with
+  // a devDependency doesn't matter for a shipped install); devDeps against all.
+  const countOver = (predicate: (dev: boolean) => boolean) => {
+    const m = new Map<string, number>();
+    for (const r of resolved) {
+      if (!r || !predicate(!!r.entry.dev)) continue;
+      for (const k of new Set(r.keys.map(id))) m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  };
+  const prodShared = countOver((dev) => !dev);
+  const allShared = countOver(() => true);
+
+  // Phase 2: score each entry by its EXCLUSIVE footprint (packages only it pulls).
+  const results = await mapLimit(resolved, concurrency, async (r): Promise<DepAudit | null> => {
+    if (!r) return null;
+    const ownId = id({ name: r.entry.name, version: r.version });
+    const shared = r.entry.dev ? allShared : prodShared;
+    const exclusive = r.keys.filter((k) => (shared.get(id(k)) ?? 0) <= 1);
+    const sizes = await Promise.all(exclusive.map((k) => registry.size(k.name, k.version)));
+    let bytes = 0;
+    let complete = true;
+    for (const s of sizes) {
+      if (typeof s === "number") bytes += s;
+      else complete = false;
+    }
+    const exclusiveDeps = exclusive.filter((k) => id(k) !== ownId).length;
+    return assembleDep(
+      { name: r.entry.name, version: r.version, direct: true, dev: r.entry.dev },
+      exclusiveDeps,
+      { bytes, complete },
+      registry,
+      fetchImpl,
+    );
+  });
 
   const ranking = results.filter((r): r is DepAudit => r !== null);
   sortRanking(ranking);

@@ -203,8 +203,8 @@ export function renderAudit(report: AuditReport, top: number): string {
   lines.push(
     pc.dim(
       "  drop = how cheaply you can escape it: small + self-contained own code scores high; " +
-        "a big dep subtree LOWERS it (hard to drop, weight rarely shed). " +
-        "Advisories are a separate axis, listed first. size↓ = install size incl. deps (+ = partial).",
+        "a big EXCLUSIVE subtree LOWERS it. Advisories are a separate axis, listed first. " +
+        "size↓ = install weight you'd uniquely shed (shared deps excluded; + = partial).",
     ),
   );
   lines.push("");

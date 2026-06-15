@@ -178,7 +178,7 @@ function renderAudit(report: AuditReport): string {
       <div class="report-head">
         <h2>${escape(target.name)}<span class="ver">@${escape(target.version)}</span></h2>
       </div>
-      <p class="repo">${report.totalDependencies} dependencies${capped}. <code>drop</code> = how cheaply you can escape it (small + self-contained scores high; a big dep subtree lowers it). Deps with known advisories are a separate axis, listed first. <code>size↓</code> = install size incl. deps. · = transitive.</p>
+      <p class="repo">${report.totalDependencies} dependencies${capped}. <code>drop</code> = how cheaply you can escape it (small + self-contained scores high; a big <em>exclusive</em> subtree lowers it). Deps with known advisories are a separate axis, listed first. <code>size↓</code> = install weight you'd uniquely shed (shared deps excluded). · = transitive.</p>
       ${tables}
       ${aiPanelHtml()}
     </div>`;

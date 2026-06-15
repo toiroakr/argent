@@ -120,11 +120,15 @@ package's full resolved dependency graph.
   so any dep with one is a separate, urgent axis: it's **listed first** and shown
   in its own column, rather than diluted into the drop score.
 
-The **`size↓`** column is the install footprint **including the dependency's own
-subtree** (`+` = some sub-package sizes were unknown, so it's a floor) — useful
-context, and the reason a heavy wrapper like `body-parser` (≈ 39 KB itself but
-≈ 1.6 MB with its tree) ranks *low*: you can't realistically inline 43 packages'
-worth of behaviour.
+The **`size↓`** column is the **exclusive** install footprint — what you'd
+*uniquely* shed by dropping the dependency: its own size plus only the packages
+reachable **solely** through it. Packages shared with other dependencies are
+excluded, because dropping this one wouldn't actually remove them (they're
+installed anyway). So `body-parser` shows ≈ 445 KB (what it uniquely pulls), not
+its ≈ 1.6 MB total tree — most of which express needs regardless. (`+` = some
+sub-package sizes were unknown, so it's a floor.) For production dependencies
+sharing is computed against the production graph only; sharing with a
+devDependency doesn't count.
 
 When auditing a local `package.json`, **dependencies** and **devDependencies**
 are ranked in separate sections (devDeps are build-time, not shipped).
