@@ -158,6 +158,31 @@ devDependencies), `--max <n>` (default 250), `--json`.
 }
 ```
 
+### `argent commons` — shared dependencies across packages you manage
+
+If you maintain **several** packages, a dependency common to many of them is an
+even better reimplementation target: build it once as an internal utility and
+drop it from every consumer — the effort amortizes across all of them.
+
+```bash
+argent commons                 # deps shared across your workspace packages
+                               # (auto-discovers pnpm / npm / yarn workspaces)
+argent commons express koa fastify   # deps common to several published packages
+argent commons --prod          # ignore devDependencies
+```
+
+```
+  value  package             used  size   action       why
+     55  encodeurl@2.0.0     2×    7KB    reimplement  used by 2 of your packages; tiny
+     53  parseurl@1.3.3      2×    10KB   reimplement  used by 2 of your packages; tiny
+     53  http-errors@2.0.1   3×    70KB   consider     used by 3 of your packages
+```
+
+`value = inline-ability × how widely you use it` — so a small, mundane dependency
+pulled in by many of your packages floats to the top. `used` is the number of
+your packages that depend on it. `--json` emits the full breakdown (`usedBy`,
+`usageCount`, `reimplementScore`, `commonsScore`, size/dep figures, …).
+
 ### Web (GitHub Pages)
 
 A static, browser-only app: <https://toiroakr.github.io/argent/>

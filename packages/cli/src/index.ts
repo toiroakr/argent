@@ -1,14 +1,16 @@
 import { parseArgs } from "node:util";
 import {
+  auditCommons,
   auditDependencies,
   auditEntries,
   availableProviders,
+  type CommonsManifest,
   evaluatePackage,
   type RiskLevel,
 } from "@argent/core";
 import pc from "picocolors";
-import { findManifest, loadManifest } from "./manifest.js";
-import { renderAudit, renderError, renderReport } from "./render.js";
+import { findManifest, findWorkspaceManifests, loadManifest } from "./manifest.js";
+import { renderAudit, renderCommons, renderError, renderReport } from "./render.js";
 import { parseSpec } from "./spec.js";
 
 const HELP = `${pc.bold("argent")} — assess the risk of npm packages before you install them
@@ -16,6 +18,7 @@ const HELP = `${pc.bold("argent")} — assess the risk of npm packages before yo
 ${pc.bold("Usage:")}
   argent <package[@version]> [more packages...] [options]
   argent audit [package[@version]] [options]
+  argent commons [package...] [options]
 
 ${pc.bold("Examples:")}
   argent express
@@ -25,6 +28,8 @@ ${pc.bold("Examples:")}
   argent audit                     ${pc.dim("# audit the nearest package.json")}
   argent audit express             ${pc.dim("# rank which dependencies to drop")}
   argent audit webpack --top 30 --direct
+  argent commons                   ${pc.dim("# deps shared across your workspace packages")}
+  argent commons express koa       ${pc.dim("# deps common to several published packages")}
 
 ${pc.bold("Options:")}
   --json             Output the raw report as JSON
@@ -40,6 +45,12 @@ ${pc.bold("audit options:")}
   --direct           Audit only direct dependencies (published-package mode)
   --prod             Skip devDependencies (package.json mode)
   --max <n>          Cap dependencies evaluated (default 250)
+
+${pc.bold("commons:")} rank dependencies shared across multiple packages you manage
+  (a common, mundane dep is worth reimplementing once and dropping everywhere).
+  With no args, discovers your workspace packages; or pass package names.
+  --top <n>          Show only the top N (default 25)
+  --prod             Ignore devDependencies
 
 ${pc.bold("Sources:")} deps.dev, OpenSSF Scorecard, socket.dev, Snyk Advisor, Build-vs-Buy.
 `;
@@ -124,6 +135,84 @@ function writeAudit(
   else process.stdout.write(renderAudit(report, top));
 }
 
+/** Builds a manifest from a published package's declared direct dependencies. */
+async function publishedManifest(
+  name: string,
+  includeDev: boolean,
+): Promise<CommonsManifest | null> {
+  try {
+    const doc = (await (
+      await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`)
+    ).json()) as {
+      "dist-tags"?: { latest?: string };
+      versions?: Record<
+        string,
+        { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
+      >;
+    };
+    const latest = doc["dist-tags"]?.latest;
+    const v = latest ? doc.versions?.[latest] : undefined;
+    if (!v) return null;
+    const entries = [
+      ...Object.keys(v.dependencies ?? {}).map((n) => ({ name: n, dev: false })),
+      ...(includeDev
+        ? Object.keys(v.devDependencies ?? {}).map((n) => ({ name: n, dev: true }))
+        : []),
+    ];
+    return { name, entries };
+  } catch {
+    return null;
+  }
+}
+
+async function runCommons(args: string[], values: AuditFlags): Promise<number> {
+  const top = values.top ? Number(values.top) : 25;
+  const includeDev = !values.prod;
+
+  let manifests: CommonsManifest[];
+  let label: string;
+  try {
+    if (args.length > 0) {
+      // Common deps across the given published packages.
+      const built = await Promise.all(args.map((a) => publishedManifest(parseSpec(a).name, includeDev)));
+      manifests = built.filter((m): m is CommonsManifest => m !== null);
+      label = `${manifests.length} packages`;
+    } else {
+      // Common deps across your local workspace packages.
+      const ws = findWorkspaceManifests(process.cwd(), includeDev);
+      if (!ws) {
+        process.stderr.write(
+          renderError(
+            "argent",
+            "no workspace found (pnpm-workspace.yaml or package.json \"workspaces\"). Pass package names to compare instead: argent commons <a> <b> …",
+          ) + "\n",
+        );
+        return 2;
+      }
+      manifests = ws.manifests;
+      label = `${manifests.length} workspace packages`;
+    }
+
+    if (manifests.length < 2) {
+      process.stderr.write(
+        renderError("argent", "need at least 2 packages to find common dependencies") + "\n",
+      );
+      return 2;
+    }
+
+    if (!values.json) process.stderr.write(pc.dim(`Analyzing ${label}…`) + "\n");
+    const report = await auditCommons(manifests);
+    if (values.json) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+    else process.stdout.write(renderCommons(report, top));
+    return 0;
+  } catch (err) {
+    process.stderr.write(
+      renderError("commons", err instanceof Error ? err.message : String(err)) + "\n",
+    );
+    return 1;
+  }
+}
+
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -147,6 +236,9 @@ async function main(): Promise<number> {
 
   if (positionals[0] === "audit") {
     return runAudit(positionals.slice(1), values);
+  }
+  if (positionals[0] === "commons") {
+    return runCommons(positionals.slice(1), values);
   }
 
   const failOn = values["fail-on"] as RiskLevel | undefined;

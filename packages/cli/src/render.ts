@@ -1,5 +1,6 @@
 import type {
   AuditReport,
+  CommonsReport,
   DepAudit,
   ProviderResult,
   RiskLevel,
@@ -205,6 +206,64 @@ export function renderAudit(report: AuditReport, top: number): string {
       "  drop = how cheaply you can escape it: small + self-contained own code scores high; " +
         "a big EXCLUSIVE subtree LOWERS it. Advisories are a separate axis, listed first. " +
         "size↓ = install weight you'd uniquely shed (shared deps excluded; + = partial).",
+    ),
+  );
+  lines.push("");
+  return lines.join("\n");
+}
+
+export function renderCommons(report: CommonsReport, top: number): string {
+  const lines: string[] = [];
+  lines.push("");
+  lines.push(
+    `${pc.bold("Common dependencies")} across ${pc.bold(String(report.packages.length))} packages`,
+  );
+  lines.push(pc.dim(`  ${report.packages.join(", ")}`));
+  lines.push("");
+
+  if (report.deps.length === 0) {
+    lines.push(pc.dim("  No dependencies shared across your packages."));
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  const shown = report.deps.slice(0, top);
+  const rows = shown.map((d) => ({
+    d,
+    pkg: `${d.name}@${d.version}${d.dev ? " (dev)" : ""}`,
+    used: `${d.usageCount}×`,
+    size:
+      d.footprintBytes !== undefined
+        ? humanBytes(d.footprintBytes) + (d.footprintApprox ? "+" : "")
+        : "?",
+  }));
+  const pkgW = Math.max(7, ...rows.map((r) => r.pkg.length));
+  const usedW = Math.max(4, ...rows.map((r) => r.used.length));
+  const sizeW = Math.max(6, ...rows.map((r) => r.size.length));
+
+  lines.push(
+    pc.dim(
+      `  ${"value".padEnd(5)}  ${"package".padEnd(pkgW)}  ${"used".padEnd(usedW)}  ${"size".padEnd(sizeW)}  ${"action".padEnd(11)}  why`,
+    ),
+  );
+  for (const { d, pkg, used, size } of rows) {
+    const value = paintDropValue(d.commonsScore, String(d.commonsScore).padStart(5));
+    lines.push(
+      `  ${value}  ${pkg.padEnd(pkgW)}  ${cell(used, usedW, pc.bold)}  ${cell(size, sizeW, pc.dim)}  ${cell(
+        d.verdict,
+        11,
+        VERDICT_COLOR[d.verdict],
+      )}  ${pc.dim(d.reasons.join("; "))}`,
+    );
+  }
+  if (report.deps.length > shown.length) {
+    lines.push(pc.dim(`  … and ${report.deps.length - shown.length} more`));
+  }
+  lines.push("");
+  lines.push(
+    pc.dim(
+      "  value = reimplementation payoff = inline-ability × how many of your packages use it. " +
+        "Reimplement once internally, drop everywhere. used = # of your packages.",
     ),
   );
   lines.push("");
