@@ -2,7 +2,8 @@ import { getJson, getText, HttpError, postText } from "../http.js";
 import type { Provider, ProviderFinding, ProviderResult, RiskLevel } from "../types.js";
 
 const GH_API = "https://api.github.com";
-const KARINTO = "https://karinto.toiroakr.workers.dev";
+// persona=regular tunes karinto's ruleset for a typical consumer's viewpoint.
+const KARINTO = "https://karinto.toiroakr.workers.dev?persona=regular";
 
 /** Parses a deps.dev repo id into owner/repo, GitHub only. */
 function parseGithub(repoUrl: string | undefined): { owner: string; repo: string } | undefined {
