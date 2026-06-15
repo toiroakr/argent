@@ -69,21 +69,40 @@ async function mapLimit<T, R>(
   return out;
 }
 
+export interface Footprint {
+  /** undefined when NO size was known (don't report a misleading 0 B). */
+  bytes: number | undefined;
+  /** false when at least one size was unknown, so a known `bytes` is a floor. */
+  complete: boolean;
+}
+
+/**
+ * Sums unpacked sizes. Older packages predate npm's `dist.unpackedSize`, so a
+ * size can be missing: `bytes` is the sum of the known ones, `undefined` if none
+ * were known at all (so callers show "?" rather than "0 B"), and `complete` is
+ * false whenever any were missing.
+ */
+export function sumSizes(sizes: (number | undefined)[]): Footprint {
+  let total = 0;
+  let known = 0;
+  let missing = 0;
+  for (const s of sizes) {
+    if (typeof s === "number") {
+      total += s;
+      known++;
+    } else missing++;
+  }
+  return { bytes: known > 0 ? total : undefined, complete: missing === 0 };
+}
+
 /**
  * Sums the unpacked sizes of a set of packages (the install footprint).
- * `complete` is false when some sizes were unknown, so `bytes` is a floor.
  * The shared registry cache means repeated packages are fetched once.
  */
 export async function footprintOf(
   keys: { name: string; version: string }[],
   registry: RegistryClient,
-): Promise<{ bytes: number; complete: boolean }> {
+): Promise<Footprint> {
   const sizes = await mapLimit(keys, 10, (k) => registry.size(k.name, k.version));
-  let bytes = 0;
-  let complete = true;
-  for (const s of sizes) {
-    if (typeof s === "number") bytes += s;
-    else complete = false;
-  }
-  return { bytes, complete };
+  return sumSizes(sizes);
 }

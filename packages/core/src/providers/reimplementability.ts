@@ -203,7 +203,7 @@ export const reimplementabilityProvider: Provider = {
           label: "Transitive dependencies",
           value: String(transitiveDeps),
         });
-      if (footprint !== undefined)
+      if (footprint?.bytes !== undefined)
         findings.push({
           label: "Install size (with deps)",
           value: humanSize(footprint.bytes) + (footprint.complete ? "" : "+"),

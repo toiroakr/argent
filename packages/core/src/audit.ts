@@ -1,5 +1,5 @@
 import { getJson } from "./http.js";
-import { makeRegistry, type RegistryClient } from "./npm.js";
+import { type Footprint, makeRegistry, type RegistryClient, sumSizes } from "./npm.js";
 import {
   findSensitiveTerms,
   recommendBuildVsBuy,
@@ -352,25 +352,16 @@ export async function auditDependencies(
       // reachable via others) are excluded, since dropping this one wouldn't
       // remove them anyway.
       const without = reachableAvoiding(adj, root, index);
-      let bytes = 0;
-      let complete = true;
+      const exclusiveSizes: (number | undefined)[] = [];
       let exclusiveDeps = 0;
       for (const i of allReachable) {
         if (without.has(i)) continue;
         if (i !== index) exclusiveDeps++;
-        const b = nodeBytes[i];
-        if (typeof b === "number") bytes += b;
-        else complete = false;
+        exclusiveSizes.push(nodeBytes[i]);
       }
       // Total subtree (incl. shared deps), for the JSON detail.
       const sub = reachableAvoiding(adj, index, -1);
-      let totalBytes = 0;
-      let totalComplete = true;
-      for (const i of sub) {
-        const b = nodeBytes[i];
-        if (typeof b === "number") totalBytes += b;
-        else totalComplete = false;
-      }
+      const totalSizes = [...sub].map((i) => nodeBytes[i]);
       return assembleDep(
         {
           name: node.versionKey.name,
@@ -378,10 +369,10 @@ export async function auditDependencies(
           direct: node.relation === "DIRECT",
         },
         exclusiveDeps,
-        { bytes, complete },
+        sumSizes(exclusiveSizes),
         registry,
         fetchImpl,
-        { deps: sub.size - 1, footprint: { bytes: totalBytes, complete: totalComplete } },
+        { deps: sub.size - 1, footprint: sumSizes(totalSizes) },
       );
     },
   );
@@ -432,11 +423,6 @@ function sortRanking(ranking: DepAudit[]): void {
       b.dropScore - a.dropScore ||
       a.name.localeCompare(b.name),
   );
-}
-
-interface Footprint {
-  bytes: number;
-  complete: boolean;
 }
 
 /** Builds a single DepAudit from the risk + reimplementability lookups. */
@@ -560,18 +546,13 @@ export async function auditEntries(
     const ownId = id({ name: r.entry.name, version: r.version });
     const shared = r.entry.dev ? allShared : prodShared;
     const uniqueKeys = [...new Map(r.keys.map((k) => [id(k), k])).values()];
-    const sumSizes = async (keys: { name: string; version: string }[]) => {
-      const sizes = await Promise.all(keys.map((k) => registry.size(k.name, k.version)));
-      let bytes = 0;
-      let complete = true;
-      for (const s of sizes) {
-        if (typeof s === "number") bytes += s;
-        else complete = false;
-      }
-      return { bytes, complete };
-    };
+    const footprintOfKeys = async (keys: { name: string; version: string }[]) =>
+      sumSizes(await Promise.all(keys.map((k) => registry.size(k.name, k.version))));
     const exclusive = uniqueKeys.filter((k) => (shared.get(id(k)) ?? 0) <= 1);
-    const [excl, tot] = await Promise.all([sumSizes(exclusive), sumSizes(uniqueKeys)]);
+    const [excl, tot] = await Promise.all([
+      footprintOfKeys(exclusive),
+      footprintOfKeys(uniqueKeys),
+    ]);
     const exclusiveDeps = exclusive.filter((k) => id(k) !== ownId).length;
     return assembleDep(
       { name: r.entry.name, version: r.version, direct: true, dev: r.entry.dev },

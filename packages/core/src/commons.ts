@@ -1,5 +1,5 @@
 import { getJson } from "./http.js";
-import { makeRegistry, type RegistryClient } from "./npm.js";
+import { makeRegistry, type RegistryClient, sumSizes } from "./npm.js";
 import { findSensitiveTerms, recommendBuildVsBuy } from "./providers/reimplementability.js";
 import { scoreDrop, type AuditEntry } from "./audit.js";
 
@@ -72,7 +72,7 @@ async function subtree(
   version: string,
   fetchImpl: typeof fetch,
   registry: RegistryClient,
-): Promise<{ deps: number; bytes: number; complete: boolean }> {
+): Promise<{ deps: number; bytes: number | undefined; complete: boolean }> {
   let nodes: GraphNode[] = [];
   try {
     const g = await getJson<{ nodes?: GraphNode[] }>(
@@ -85,12 +85,7 @@ async function subtree(
   }
   const keys = nodes.length ? nodes.map((n) => n.versionKey) : [{ name, version }];
   const sizes = await Promise.all(keys.map((k) => registry.size(k.name, k.version)));
-  let bytes = 0;
-  let complete = true;
-  for (const s of sizes) {
-    if (typeof s === "number") bytes += s;
-    else complete = false;
-  }
+  const { bytes, complete } = sumSizes(sizes);
   return { deps: Math.max(0, keys.length - 1), bytes, complete };
 }
 
