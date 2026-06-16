@@ -70,9 +70,9 @@ export const githubActionsProvider: Provider = {
         throw err;
       }
 
-      const ymls = files
-        .filter((f) => /\.ya?ml$/.test(f.name) && f.download_url)
-        .slice(0, 12);
+      const MAX_WORKFLOWS = 40; // bound karinto calls without truncating typical repos
+      const all = files.filter((f) => /\.ya?ml$/.test(f.name) && f.download_url);
+      const ymls = all.slice(0, MAX_WORKFLOWS);
       if (ymls.length === 0) {
         return { ...base, ok: true, level: "low", summary: "No workflow files", findings: [], url };
       }
@@ -110,11 +110,13 @@ export const githubActionsProvider: Provider = {
         counts.warning ? `${counts.warning} warning` : "",
         counts.info ? `${counts.info} info` : "",
       ].filter(Boolean);
+      const scope =
+        all.length > ymls.length ? `${ymls.length} of ${all.length} workflow(s)` : `${all.length} workflow(s)`;
       return {
         ...base,
         ok: true,
         level,
-        summary: `${ymls.length} workflow(s): ${parts.length ? parts.join(", ") : "clean"}`,
+        summary: `${scope}: ${parts.length ? parts.join(", ") : "clean"}`,
         findings,
         url,
       };
