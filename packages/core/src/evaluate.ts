@@ -60,6 +60,7 @@ export async function evaluatePackage(
   const config: EvalConfig = {
     socketApiKey: options.socketApiKey,
     githubToken: options.githubToken,
+    maxWorkflows: options.maxWorkflows,
     browser: options.browser ?? false,
   };
 

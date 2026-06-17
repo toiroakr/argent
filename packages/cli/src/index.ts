@@ -37,6 +37,7 @@ ${pc.bold("Options:")}
   --fail-on <level>  Exit non-zero when overall risk >= level
                      (low | medium | high | critical)
   --socket-key <k>   socket.dev API token (or set SOCKET_API_KEY)
+  --max-workflows <n> Max CI workflows the GitHub Actions check lints (default 40)
   --no-color         Disable colored output
   -h, --help         Show this help
 
@@ -245,6 +246,7 @@ async function main(): Promise<number> {
       json: { type: "boolean", default: false },
       "fail-on": { type: "string" },
       "socket-key": { type: "string" },
+      "max-workflows": { type: "string" },
       color: { type: "boolean" },
       top: { type: "string" },
       direct: { type: "boolean", default: false },
@@ -275,6 +277,7 @@ async function main(): Promise<number> {
   }
 
   const socketApiKey = values["socket-key"] ?? process.env.SOCKET_API_KEY;
+  const maxWorkflows = values["max-workflows"] ? Number(values["max-workflows"]) : undefined;
   const github = resolveGithubToken();
 
   if (!values.json) {
@@ -295,7 +298,7 @@ async function main(): Promise<number> {
     positionals.map(async (spec) => {
       const { name, version } = parseSpec(spec);
       try {
-        return await evaluatePackage(name, { version, socketApiKey, githubToken });
+        return await evaluatePackage(name, { version, socketApiKey, githubToken, maxWorkflows });
       } catch (err) {
         return {
           error: err instanceof Error ? err.message : String(err),

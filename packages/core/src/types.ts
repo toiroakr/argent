@@ -79,6 +79,8 @@ export interface EvalConfig {
   socketApiKey?: string;
   /** GitHub token; raises the API rate limit for the GitHub-based providers. */
   githubToken?: string;
+  /** Max workflow files the GitHub Actions provider lints (default 40). */
+  maxWorkflows?: number;
   /** Whether the run is happening in a browser (disables CORS-unsafe calls). */
   browser?: boolean;
 }

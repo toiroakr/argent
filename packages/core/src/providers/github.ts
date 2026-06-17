@@ -70,9 +70,10 @@ export const githubActionsProvider: Provider = {
         throw err;
       }
 
-      const MAX_WORKFLOWS = 40; // bound karinto calls without truncating typical repos
+      // Bound karinto calls; configurable, default high enough for typical repos.
+      const maxWorkflows = ctx.config.maxWorkflows ?? 40;
       const all = files.filter((f) => /\.ya?ml$/.test(f.name) && f.download_url);
-      const ymls = all.slice(0, MAX_WORKFLOWS);
+      const ymls = all.slice(0, maxWorkflows);
       if (ymls.length === 0) {
         return { ...base, ok: true, level: "low", summary: "No workflow files", findings: [], url };
       }
