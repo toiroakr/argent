@@ -28,8 +28,10 @@ dependency.
 
 > ¹ Requires a `SOCKET_API_KEY`. ² Needs a server/CLI (API key or CORS), so the
 > web app links out instead. ³ Scraped from the public Advisor page (best-effort).
-> ⁴ Uses the GitHub API — set `GITHUB_TOKEN` to avoid the 60-req/hour
-> unauthenticated rate limit. ⁵ ecosyste.ms isn't CORS-enabled, so CLI-only.
+> ⁴ Uses the GitHub API. The CLI authenticates via `GITHUB_TOKEN`, or falls back
+> to your logged-in `gh` CLI (`gh auth token`) — so an authenticated `gh` setup
+> gets rate-limit relief (and private-repo reads) with no config. ⁵ ecosyste.ms
+> isn't CORS-enabled, so CLI-only.
 
 Results are normalized to a shared scale — `low` · `medium` · `high` ·
 `critical` · `unknown` — and the report's overall level is the worst across the

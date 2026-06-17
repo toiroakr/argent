@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import {
   auditCommons,
@@ -55,8 +56,29 @@ ${pc.bold("commons:")} rank dependencies shared across multiple packages you man
 ${pc.bold("Sources:")} deps.dev, OpenSSF Scorecard, Supply Chain, socket.dev,
 Snyk Advisor, GitHub Actions (karinto), Community, Popularity, License,
 Build-vs-Buy.
-${pc.dim("Set GITHUB_TOKEN to raise the GitHub API rate limit.")}
+${pc.dim("GitHub auth: uses GITHUB_TOKEN, else the logged-in gh CLI (gh auth token).")}
 `;
+
+/**
+ * Resolves a GitHub token for the GitHub-based providers: an explicit env var
+ * wins, otherwise fall back to the locally authenticated `gh` CLI so most
+ * developers get authenticated (rate-limit-relieved, private-repo) reads for
+ * free without configuring anything.
+ */
+function resolveGithubToken(): { token?: string; viaGh?: boolean } {
+  const fromEnv = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  if (fromEnv) return { token: fromEnv };
+  try {
+    const token = execFileSync("gh", ["auth", "token"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5_000,
+    }).trim();
+    return token ? { token, viaGh: true } : {};
+  } catch {
+    return {};
+  }
+}
 
 const SEVERITY: RiskLevel[] = ["low", "medium", "high", "critical"];
 
@@ -253,16 +275,21 @@ async function main(): Promise<number> {
   }
 
   const socketApiKey = values["socket-key"] ?? process.env.SOCKET_API_KEY;
-  const githubToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  const github = resolveGithubToken();
 
   if (!values.json) {
     process.stderr.write(
       pc.dim(`Sources: ${availableProviders(false).join(", ")}`) +
         (socketApiKey ? "" : pc.dim("  (socket.dev disabled — no API key)")) +
-        (githubToken ? "" : pc.dim("  (GitHub unauthenticated — set GITHUB_TOKEN)")) +
+        (github.token
+          ? github.viaGh
+            ? pc.dim("  (GitHub via gh)")
+            : ""
+          : pc.dim("  (GitHub unauthenticated — set GITHUB_TOKEN or run gh auth login)")) +
         "\n",
     );
   }
+  const githubToken = github.token;
 
   const reports = await Promise.all(
     positionals.map(async (spec) => {
