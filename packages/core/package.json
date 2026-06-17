@@ -1,6 +1,6 @@
 {
   "name": "@argent/core",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "private": true,
   "description": "Core risk-evaluation logic for argent: queries deps.dev, OpenSSF Scorecard, socket.dev and Snyk Advisor. Bundled into the CLI; not published separately.",
   "type": "module",
