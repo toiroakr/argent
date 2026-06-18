@@ -126,6 +126,14 @@ function humanBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+/** Compact dropScore breakdown: the three weighted factors (each /100). */
+function dropBreakdown(d: DepAudit): string {
+  const b = d.breakdown;
+  if (!b) return d.reasons[0] ?? "";
+  if (b.sensitive) return "sensitive — kept low";
+  return `own ${b.ownCode} · self ${b.selfContained} · ftpt ${b.footprint}`;
+}
+
 /** Renders one ranked table (header + rows + overflow note) for a dep group. */
 function auditTable(deps: DepAudit[], top: number): string[] {
   const lines: string[] = [];
@@ -150,7 +158,7 @@ function auditTable(deps: DepAudit[], top: number): string[] {
 
   lines.push(
     pc.dim(
-      `  ${"drop".padEnd(4)}  ${"package".padEnd(pkgW)}  ${"size↓".padEnd(sizeW)}  ${"risk".padEnd(riskW)}  ${"action".padEnd(11)}  why`,
+      `  ${"drop".padEnd(4)}  ${"package".padEnd(pkgW)}  ${"size↓".padEnd(sizeW)}  ${"risk".padEnd(riskW)}  ${"action".padEnd(11)}  drop = 0.40·own + 0.35·self + 0.25·ftpt`,
     ),
   );
   for (const { d, pkg, size, risk } of rows) {
@@ -165,7 +173,7 @@ function auditTable(deps: DepAudit[], top: number): string[] {
         risk,
         riskW,
         riskPaint,
-      )}  ${cell(d.verdict, 11, VERDICT_COLOR[d.verdict])}  ${pc.dim(d.reasons[0] ?? "")}`,
+      )}  ${cell(d.verdict, 11, VERDICT_COLOR[d.verdict])}  ${pc.dim(dropBreakdown(d))}`,
     );
   }
   if (deps.length > shown.length) {
@@ -216,9 +224,10 @@ export function renderAudit(report: AuditReport, top: number): string {
   lines.push("");
   lines.push(
     pc.dim(
-      "  drop = how cheaply you can escape it: small + self-contained own code scores high; " +
-        "a big EXCLUSIVE subtree LOWERS it. Deprecated deps & advisories are a separate axis, " +
-        "listed first; ⚙ = runs install scripts. size↓ = install weight you'd uniquely shed.",
+      "  drop = 0.40·own + 0.35·self + 0.25·ftpt (each /100): own = small own code, " +
+        "self = few transitive deps, ftpt = light install footprint (sensitive caps it low). " +
+        "Deprecated/advisories are a separate axis (listed first); ⚙ = install scripts; " +
+        "size↓ = install weight uniquely shed.",
     ),
   );
   lines.push("");

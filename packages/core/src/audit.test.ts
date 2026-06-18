@@ -11,13 +11,15 @@ const base = {
 // dropScore is an adoption signal only — vulnerabilities are a separate axis,
 // so they are intentionally NOT an input here.
 
+const drop = (i: Parameters<typeof scoreDrop>[0]) => scoreDrop(i).score;
+
 test("a tiny self-contained utility is the best drop candidate", () => {
-  expect(scoreDrop({ ...base, ownBytes: 2_000, footprintBytes: 5_000 })).toBeGreaterThan(70);
+  expect(drop({ ...base, ownBytes: 2_000, footprintBytes: 5_000 })).toBeGreaterThan(70);
 });
 
 test("a thin wrapper over a big tree is NOT easy to drop", () => {
-  const leaf = scoreDrop(base);
-  const wrapper = scoreDrop({
+  const leaf = drop(base);
+  const wrapper = drop({
     ...base,
     ownBytes: 30_000,
     footprintBytes: 1_600_000,
@@ -28,17 +30,24 @@ test("a thin wrapper over a big tree is NOT easy to drop", () => {
 });
 
 test("more transitive deps lower the score (less self-contained)", () => {
-  const fewer = scoreDrop({ ...base, transitiveDeps: 1 });
-  const more = scoreDrop({ ...base, transitiveDeps: 10, footprintBytes: 800_000 });
+  const fewer = drop({ ...base, transitiveDeps: 1 });
+  const more = drop({ ...base, transitiveDeps: 10, footprintBytes: 800_000 });
   expect(more).toBeLessThan(fewer);
 });
 
 test("large own code is harder to reimplement", () => {
-  const tiny = scoreDrop({ ...base, ownBytes: 3_000 });
-  const big = scoreDrop({ ...base, ownBytes: 400_000 });
+  const tiny = drop({ ...base, ownBytes: 3_000 });
+  const big = drop({ ...base, ownBytes: 400_000 });
   expect(tiny).toBeGreaterThan(big);
 });
 
 test("security-sensitive scores low regardless of size", () => {
-  expect(scoreDrop({ ...base, sensitive: true })).toBeLessThanOrEqual(15);
+  expect(drop({ ...base, sensitive: true })).toBeLessThanOrEqual(15);
+});
+
+test("breakdown factors are exposed and weight to the score", () => {
+  const { score, breakdown } = scoreDrop({ ...base, ownBytes: 2_000, footprintBytes: 5_000 });
+  expect(breakdown.ownCode).toBeGreaterThan(80);
+  expect(breakdown.selfContained).toBe(100);
+  expect(Math.round(0.4 * breakdown.ownCode + 0.35 * breakdown.selfContained + 0.25 * breakdown.footprint)).toBe(score);
 });

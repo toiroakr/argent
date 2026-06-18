@@ -47,6 +47,8 @@ export interface DepAudit {
   sensitive: boolean;
   /** 0-100; higher = stronger candidate to drop to improve the parent. */
   dropScore: number;
+  /** Per-factor breakdown of dropScore (own code / self-contained / footprint). */
+  breakdown?: DropBreakdown;
   reasons: string[];
 }
 
@@ -114,9 +116,28 @@ export interface DropInputs {
  *   - few/no transitive deps → self-contained, nothing to re-expand
  *   - small install footprint → little real functionality delegated
  */
-export function scoreDrop(i: DropInputs): number {
+/** Per-factor breakdown of a dropScore (each 0-100, higher = more droppable). */
+export interface DropBreakdown {
+  /** Smaller own code = more inline-able. Weight 40%. */
+  ownCode: number;
+  /** Fewer transitive deps = more self-contained. Weight 35%. */
+  selfContained: number;
+  /** Lighter install footprint = less delegated functionality. Weight 25%. */
+  footprint: number;
+  /** Security-sensitive code caps the score regardless of size. */
+  sensitive: boolean;
+}
+
+export interface DropResult {
+  score: number;
+  breakdown: DropBreakdown;
+}
+
+export function scoreDrop(i: DropInputs): DropResult {
   // Reimplementing security-sensitive code is a bad idea regardless of size.
-  if (i.sensitive) return 10;
+  if (i.sensitive) {
+    return { score: 10, breakdown: { ownCode: 0, selfContained: 0, footprint: 0, sensitive: true } };
+  }
 
   const ownFactor =
     i.ownBytes === undefined ? 0.5 : 1 - logScale(i.ownBytes, 2_000, 500_000); // 2KB→1, 500KB→0
@@ -127,7 +148,16 @@ export function scoreDrop(i: DropInputs): number {
       : 1 - logScale(i.footprintBytes, 10_000, 2_000_000); // 10KB→1, 2MB→0
 
   const ease = clamp01(0.4 * ownFactor + 0.35 * selfContained + 0.25 * lightFactor);
-  return Math.round(100 * ease);
+  const pct = (x: number) => Math.round(100 * x);
+  return {
+    score: pct(ease),
+    breakdown: {
+      ownCode: pct(ownFactor),
+      selfContained: pct(selfContained),
+      footprint: pct(lightFactor),
+      sensitive: false,
+    },
+  };
 }
 
 interface GraphNode {
@@ -458,13 +488,13 @@ async function assembleDep(
     verdict: reimpl.verdict,
     sensitive: reimpl.sensitive,
   };
-  const score = scoreDrop({
+  const { score, breakdown } = scoreDrop({
     sensitive: reimpl.sensitive,
     ownBytes: reimpl.unpackedSize,
     footprintBytes: footprint?.bytes,
     transitiveDeps,
   });
-  return { ...partial, dropScore: score, reasons: buildReasons(partial) };
+  return { ...partial, dropScore: score, breakdown, reasons: buildReasons(partial) };
 }
 
 /** Fetches a single package's resolved dependency graph nodes (self included). */

@@ -137,6 +137,12 @@ function depRow(d: DepAudit): string {
     d.dropScore >= 70 ? "hi" : d.dropScore >= 45 ? "mid" : d.dropScore >= 25 ? "lo" : "min";
   // ⚙ marks a dependency that runs install scripts.
   const install = d.installScript ? ` <span class="dim" title="runs install scripts">⚙</span>` : "";
+  const b = d.breakdown;
+  const why = !b
+    ? escape(d.reasons[0] ?? "")
+    : b.sensitive
+      ? "sensitive — kept low"
+      : `<span title="0.40·own + 0.35·self + 0.25·footprint">own ${b.ownCode} · self ${b.selfContained} · ftpt ${b.footprint}</span>`;
   return `
     <tr>
       <td class="drop ${drop}">${d.dropScore}</td>
@@ -144,7 +150,7 @@ function depRow(d: DepAudit): string {
       <td class="size">${size}</td>
       <td class="risk">${risk}</td>
       <td class="verdict ${d.verdict}">${d.verdict}</td>
-      <td class="why dim">${escape(d.reasons[0] ?? "")}</td>
+      <td class="why dim">${why}</td>
     </tr>`;
 }
 

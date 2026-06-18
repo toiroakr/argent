@@ -163,7 +163,7 @@ export async function auditCommons(
       ownBytes: unpackedSize,
       footprintBytes: tree.bytes,
       transitiveDeps: tree.deps,
-    });
+    }).score;
     // Wider use → more value in reimplementing once. 1 user would be 0.2, the
     // most-used dep 1.0.
     const usageWeight = 0.2 + 0.8 * ((u.usedBy.size - 1) / Math.max(1, maxUsage - 1));
