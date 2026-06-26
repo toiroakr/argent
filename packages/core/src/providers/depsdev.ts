@@ -1,5 +1,5 @@
 import { getJson, HttpError } from "../http.js";
-import { aggregate, levelFromSeverity } from "../risk.js";
+import { levelFromAdvisories, levelFromSeverity } from "../risk.js";
 import type { EvalContext, ProviderFinding, ProviderResult } from "../types.js";
 
 const BASE = "https://api.deps.dev/v3";
@@ -109,9 +109,9 @@ export async function evaluateDepsDev(
       });
     }
 
-    const level = advisories.length
-      ? aggregate(advLevels.length ? advLevels : ["high"])
-      : "low";
+    // A known advisory whose severity we can't parse still counts: see
+    // levelFromAdvisories (floors all-unknown advisories to "medium").
+    const level = levelFromAdvisories(advLevels);
     const summary = advisories.length
       ? `${advisories.length} known advisory(ies) for ${version}`
       : `No known advisories for ${version}`;

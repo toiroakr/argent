@@ -31,6 +31,20 @@ export function levelFromScore(score: number): RiskLevel {
   return "critical";
 }
 
+/**
+ * Risk level for a package given the normalized severities of its known
+ * advisories. An empty list means "no advisories" → "low". Otherwise the worst
+ * severity — but a present advisory whose severity we couldn't parse must NOT be
+ * silently dropped: plain `aggregate()` discards "unknown", so an all-unknown
+ * set (advisories exist, severities unparseable) floors to "medium" rather than
+ * vanishing from the overall risk.
+ */
+export function levelFromAdvisories(severities: RiskLevel[]): RiskLevel {
+  if (severities.length === 0) return "low";
+  const level = aggregate(severities);
+  return level === "unknown" ? "medium" : level;
+}
+
 /** CVSS-style severity string -> normalized level. */
 export function levelFromSeverity(severity: string | undefined): RiskLevel {
   switch ((severity ?? "").toUpperCase()) {

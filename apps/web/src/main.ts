@@ -101,6 +101,13 @@ function renderReport(report: RiskReport): string {
         ${badge(report.overall)}
       </div>
       ${pkg.repoUrl ? `<p class="repo">${escape(pkg.repoUrl)}</p>` : ""}
+      ${
+        report.coverage.missing.length
+          ? `<p class="repo">Security coverage: ${report.coverage.evaluated}/${report.coverage.total} sources — not assessed: ${escape(
+              report.coverage.missing.map((m) => `${m.provider} (${m.reason})`).join(", "),
+            )}</p>`
+          : ""
+      }
       <div class="providers">${report.results.map(renderProvider).join("")}</div>
       ${aiPanelHtml()}
     </div>`;
@@ -110,6 +117,13 @@ function summarizeReport(report: RiskReport): string {
   const lines = [
     `Package: ${report.package.name}@${report.package.version}`,
     `Overall security risk: ${report.overall}`,
+    `Security coverage: ${report.coverage.evaluated}/${report.coverage.total} sources contributed${
+      report.coverage.missing.length
+        ? ` (not assessed: ${report.coverage.missing
+            .map((m) => `${m.provider} (${m.reason})`)
+            .join(", ")})`
+        : ""
+    }`,
   ];
   for (const r of report.results) {
     if (r.skipped) continue;

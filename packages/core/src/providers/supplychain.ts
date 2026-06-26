@@ -1,5 +1,6 @@
 import { getJson } from "../http.js";
 import { REGISTRY, type RegistryDoc } from "../npm.js";
+import { type RepoTrust, verifyRepo } from "../provenance.js";
 import type { Provider, ProviderFinding, ProviderResult, RiskLevel } from "../types.js";
 
 /** npm lifecycle scripts that run on `npm install` — a classic malware vector. */
@@ -40,10 +41,26 @@ export const supplyChainProvider: Provider = {
       });
 
       const hasProvenance = Boolean(v.dist?.attestations?.provenance);
+      // When the package ships provenance, confirm it was actually built from the
+      // repo its metadata links to — a mismatch means the linked repo (and the
+      // Scorecard/Actions/Community scores derived from it) can't be trusted.
+      let trust: RepoTrust = "unverified";
+      let attestedRepo: string | undefined;
+      if (hasProvenance) {
+        const res = await verifyRepo(ctx.name, ctx.version, ctx.repoUrl, ctx.fetch);
+        trust = res.trust;
+        attestedRepo = res.attestedRepo;
+      }
       findings.push({
         label: "Build provenance",
-        value: hasProvenance ? "yes" : "no",
-        level: hasProvenance ? "low" : undefined,
+        value: !hasProvenance
+          ? "no"
+          : trust === "mismatch"
+            ? `yes, but attests ${attestedRepo} (≠ linked repo)`
+            : trust === "verified"
+              ? "yes (repo verified)"
+              : "yes",
+        level: trust === "mismatch" ? "high" : hasProvenance ? "low" : undefined,
       });
 
       const maintainers = doc.maintainers?.length ?? 0;
@@ -53,16 +70,21 @@ export const supplyChainProvider: Provider = {
         level: maintainers === 1 ? "medium" : "low",
       });
 
-      // Only a deprecation raises the overall level; install scripts and a lone
+      // A provenance/repo mismatch is a spoofing signal, so it raises the level
+      // outright. Otherwise only a deprecation does; install scripts and a lone
       // maintainer are common enough that they're surfaced as cautions, not alarms.
-      const level: RiskLevel = deprecated ? "high" : hooks.length ? "medium" : "low";
-      const summary = deprecated
-        ? "Deprecated — avoid"
-        : [
-            hooks.length ? "runs install scripts" : "no install scripts",
-            hasProvenance ? "has provenance" : "no provenance",
-            `${maintainers} maintainer(s)`,
-          ].join(", ");
+      const level: RiskLevel =
+        trust === "mismatch" ? "high" : deprecated ? "high" : hooks.length ? "medium" : "low";
+      const summary =
+        trust === "mismatch"
+          ? `Provenance mismatch — links ${ctx.repoUrl} but was built from ${attestedRepo} (possible repo spoofing)`
+          : deprecated
+            ? "Deprecated — avoid"
+            : [
+                hooks.length ? "runs install scripts" : "no install scripts",
+                hasProvenance ? "has provenance" : "no provenance",
+                `${maintainers} maintainer(s)`,
+              ].join(", ");
 
       return { ...base, ok: true, level, summary, findings };
     } catch (err) {

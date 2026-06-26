@@ -70,6 +70,15 @@ export function renderReport(report: RiskReport): string {
     `${pc.bold(pkg.name)}${pc.dim("@")}${pkg.version}  ${paintLevel(report.overall)}`,
   );
   if (pkg.repoUrl) lines.push(pc.dim(`  ${pkg.repoUrl}`));
+
+  // Surface how thin the assessment is: a worst-case "low" off only one or two
+  // sources is not the same as one off the full set.
+  const cov = report.coverage;
+  if (cov.missing.length > 0) {
+    const names = cov.missing.map((m) => `${m.provider} (${m.reason})`).join(", ");
+    const note = `  security coverage: ${cov.evaluated}/${cov.total} sources — not assessed: ${names}`;
+    lines.push(cov.evaluated * 2 <= cov.total ? pc.yellow(note) : pc.dim(note));
+  }
   lines.push("");
 
   for (const r of report.results) {

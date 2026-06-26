@@ -6,7 +6,7 @@ import {
   type BuildVsBuyVerdict,
 } from "./providers/reimplementability.js";
 import { INSTALL_HOOKS } from "./providers/supplychain.js";
-import { aggregate, levelFromSeverity } from "./risk.js";
+import { levelFromAdvisories, levelFromSeverity } from "./risk.js";
 import type { RiskLevel } from "./types.js";
 
 const DEPSDEV = "https://api.deps.dev/v3";
@@ -252,7 +252,8 @@ async function depRisk(
       ),
     );
     return {
-      level: aggregate(sevs.map((s) => levelFromSeverity(s.severity))),
+      // Floor all-unknown-severity advisories to "medium" so they aren't lost.
+      level: levelFromAdvisories(sevs.map((s) => levelFromSeverity(s.severity))),
       count: keys.length,
     };
   } catch {

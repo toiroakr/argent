@@ -9,10 +9,19 @@ export type {
   CommonsOptions,
   CommonDep,
 } from "./commons.js";
-export { aggregate, worse, levelFromScore, levelFromSeverity } from "./risk.js";
+export {
+  aggregate,
+  worse,
+  levelFromScore,
+  levelFromSeverity,
+  levelFromAdvisories,
+} from "./risk.js";
+export { verifyRepo, normalizeRepo } from "./provenance.js";
+export type { RepoTrust, RepoVerification } from "./provenance.js";
 export type {
   RiskLevel,
   RiskReport,
+  Coverage,
   ProviderResult,
   ProviderFinding,
   PackageRef,
