@@ -33,8 +33,13 @@ export interface ResolvedPackage {
 }
 
 export function pickRepo(version: DepsDevVersion): string | undefined {
-  const fromProject = version.relatedProjects?.find((p) =>
-    /^github\.com\/|^gitlab\.com\/|^bitbucket\.org\//.test(p.projectKey?.id ?? ""),
+  // Only the SOURCE_REPO relation is the package's own repository; other
+  // relations (e.g. ISSUE_TRACKER) can point at a different repo and must not
+  // become the source we score / verify provenance against.
+  const fromProject = version.relatedProjects?.find(
+    (p) =>
+      p.relationType === "SOURCE_REPO" &&
+      /^github\.com\/|^gitlab\.com\/|^bitbucket\.org\//.test(p.projectKey?.id ?? ""),
   )?.projectKey?.id;
   if (fromProject) return fromProject;
 

@@ -101,13 +101,13 @@ function renderReport(report: RiskReport): string {
         ${badge(report.overall)}
       </div>
       ${pkg.repoUrl ? `<p class="repo">${escape(pkg.repoUrl)}</p>` : ""}
-      ${
+      <p class="repo">Security coverage: ${report.coverage.evaluated}/${report.coverage.total} sources${
         report.coverage.missing.length
-          ? `<p class="repo">Security coverage: ${report.coverage.evaluated}/${report.coverage.total} sources — not assessed: ${escape(
+          ? ` — not assessed: ${escape(
               report.coverage.missing.map((m) => `${m.provider} (${m.reason})`).join(", "),
-            )}</p>`
+            )}`
           : ""
-      }
+      }</p>
       <div class="providers">${report.results.map(renderProvider).join("")}</div>
       ${aiPanelHtml()}
     </div>`;

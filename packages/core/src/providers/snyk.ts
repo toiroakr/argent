@@ -61,6 +61,11 @@ export const snykProvider: Provider = {
   },
 };
 
+/**
+ * Best-effort scrape of Snyk's health score from the page HTML: prefers the
+ * structured __NEXT_DATA__ blob, then falls back to the rendered number and an
+ * "N / 100" label. Returns undefined (not a guess) when nothing usable matches.
+ */
 export function extractScore(html: string): number | undefined {
   // Preferred: structured Next.js data blob.
   const next = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);

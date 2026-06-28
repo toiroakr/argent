@@ -33,7 +33,9 @@ export function normalizeRepo(raw: string | undefined): string | undefined {
     .replace(/^git\+/, "")
     .match(/(github\.com|gitlab\.com|bitbucket\.org)[/:]([^/]+)\/([^/#?]+)/i);
   if (!m) return undefined;
-  return `${m[1]!.toLowerCase()}/${m[2]}/${m[3]!.replace(/\.git$/, "")}`;
+  // Lowercase the whole id: these hosts treat owner/repo case-insensitively, so
+  // a case-only difference must NOT register as a mismatch in verifyRepo().
+  return `${m[1]!}/${m[2]!}/${m[3]!.replace(/\.git$/i, "")}`.toLowerCase();
 }
 
 /**

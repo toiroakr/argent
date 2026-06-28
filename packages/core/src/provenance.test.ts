@@ -1,9 +1,11 @@
 import { expect, test } from "vitest";
 import { normalizeRepo, repoFromStatement, verifyRepo } from "./provenance.js";
 
-test("normalizeRepo reduces URLs/ids to host/org/repo", () => {
+test("normalizeRepo reduces URLs/ids to a lowercased host/org/repo", () => {
+  // Owner/repo are lowercased too: these hosts are case-insensitive, so a
+  // case-only difference must not later read as a repo mismatch.
   expect(normalizeRepo("https://github.com/Expressjs/Express.git")).toBe(
-    "github.com/Expressjs/Express",
+    "github.com/expressjs/express",
   );
   expect(normalizeRepo("git+ssh://git@github.com/a/b.git")).toBe("github.com/a/b");
   expect(normalizeRepo("github.com/a/b")).toBe("github.com/a/b");
@@ -55,6 +57,16 @@ test("verifyRepo confirms a matching attested repo", async () => {
     fetchWith(provenanceStmt("https://github.com/owner/repo")),
   );
   expect(res).toEqual({ trust: "verified", attestedRepo: "github.com/owner/repo" });
+});
+
+test("verifyRepo treats a case-only difference as verified, not a mismatch", async () => {
+  const res = await verifyRepo(
+    "pkg",
+    "1.0.0",
+    "github.com/Sigstore/Sigstore-JS",
+    fetchWith(provenanceStmt("https://github.com/sigstore/sigstore-js")),
+  );
+  expect(res.trust).toBe("verified");
 });
 
 test("verifyRepo flags a repo that differs from the attested one (spoofing)", async () => {
