@@ -18,7 +18,7 @@ import type {
 } from "./types.js";
 
 /** Summarizes how many security (non-advisory) sources actually contributed. */
-function coverageOf(results: ProviderResult[]): Coverage {
+export function coverageOf(results: ProviderResult[]): Coverage {
   const security = results.filter((r) => !r.advisory);
   const missing = security
     .filter((r) => !(r.ok && !r.skipped && r.level !== "unknown"))
