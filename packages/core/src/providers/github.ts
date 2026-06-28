@@ -6,7 +6,9 @@ const GH_API = "https://api.github.com";
 const KARINTO = "https://karinto.toiroakr.workers.dev?persona=regular";
 
 /** Parses a deps.dev repo id into owner/repo, GitHub only. */
-function parseGithub(repoUrl: string | undefined): { owner: string; repo: string } | undefined {
+export function parseGithub(
+  repoUrl: string | undefined,
+): { owner: string; repo: string } | undefined {
   if (!repoUrl) return undefined;
   const m = repoUrl.match(/^github\.com\/([^/]+)\/([^/]+)/);
   return m ? { owner: m[1]!, repo: m[2]!.replace(/\.git$/, "") } : undefined;
@@ -173,7 +175,7 @@ interface Issue {
 }
 
 /** Median days-to-close over recently closed real issues (PRs excluded). */
-function medianCloseDays(issues: Issue[]): number | undefined {
+export function medianCloseDays(issues: Issue[]): number | undefined {
   const days = issues
     .filter((i) => !i.pull_request && i.closed_at)
     .map((i) => (Date.parse(i.closed_at!) - Date.parse(i.created_at)) / 86_400_000)

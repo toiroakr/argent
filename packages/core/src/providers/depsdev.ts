@@ -32,7 +32,7 @@ export interface ResolvedPackage {
   result: ProviderResult;
 }
 
-function pickRepo(version: DepsDevVersion): string | undefined {
+export function pickRepo(version: DepsDevVersion): string | undefined {
   const fromProject = version.relatedProjects?.find((p) =>
     /^github\.com\/|^gitlab\.com\/|^bitbucket\.org\//.test(p.projectKey?.id ?? ""),
   )?.projectKey?.id;

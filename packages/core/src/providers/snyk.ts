@@ -61,7 +61,7 @@ export const snykProvider: Provider = {
   },
 };
 
-function extractScore(html: string): number | undefined {
+export function extractScore(html: string): number | undefined {
   // Preferred: structured Next.js data blob.
   const next = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
   if (next?.[1]) {
