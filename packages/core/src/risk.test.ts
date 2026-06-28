@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { aggregate, levelFromScore, levelFromSeverity, worse } from "./risk.js";
+import {
+  aggregate,
+  levelFromAdvisories,
+  levelFromScore,
+  levelFromSeverity,
+  worse,
+} from "./risk.js";
 
 test("worse picks the more severe level", () => {
   expect(worse("low", "high")).toBe("high");
@@ -24,4 +30,20 @@ test("levelFromSeverity normalizes provider strings", () => {
   expect(levelFromSeverity("CRITICAL")).toBe("critical");
   expect(levelFromSeverity("moderate")).toBe("medium");
   expect(levelFromSeverity(undefined)).toBe("unknown");
+});
+
+test("levelFromAdvisories: no advisories is low", () => {
+  expect(levelFromAdvisories([])).toBe("low");
+});
+
+test("levelFromAdvisories: worst real severity wins", () => {
+  expect(levelFromAdvisories(["low", "high", "medium"])).toBe("high");
+  expect(levelFromAdvisories(["unknown", "critical"])).toBe("critical");
+});
+
+test("levelFromAdvisories: present-but-unparseable advisories floor to medium", () => {
+  // The bug this guards: aggregate() discards "unknown", so a known advisory
+  // with no parseable severity must not silently vanish from the overall risk.
+  expect(levelFromAdvisories(["unknown"])).toBe("medium");
+  expect(levelFromAdvisories(["unknown", "unknown"])).toBe("medium");
 });

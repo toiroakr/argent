@@ -9,12 +9,28 @@ import { socketProvider } from "./providers/socket.js";
 import { supplyChainProvider } from "./providers/supplychain.js";
 import { aggregate } from "./risk.js";
 import type {
+  Coverage,
   EvalConfig,
   EvalContext,
   Provider,
   ProviderResult,
   RiskReport,
 } from "./types.js";
+
+/** Summarizes how many security (non-advisory) sources actually contributed. */
+export function coverageOf(results: ProviderResult[]): Coverage {
+  const security = results.filter((r) => !r.advisory);
+  const missing = security
+    .filter((r) => !(r.ok && !r.skipped && r.level !== "unknown"))
+    .map((r) => ({
+      provider: r.provider,
+      reason: (r.skipped ? "skipped" : !r.ok ? "error" : "unknown") as
+        | "skipped"
+        | "error"
+        | "unknown",
+    }));
+  return { evaluated: security.length - missing.length, total: security.length, missing };
+}
 
 /** Providers that run after deps.dev resolves the version + repo. */
 const SECONDARY: Provider[] = [
@@ -103,6 +119,7 @@ export async function evaluatePackage(
     package: { name, version: resolved.version, repoUrl: resolved.repoUrl },
     results,
     overall,
+    coverage: coverageOf(results),
     generatedAt: new Date().toISOString(),
   };
 }

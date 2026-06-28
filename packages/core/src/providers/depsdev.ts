@@ -1,5 +1,5 @@
 import { getJson, HttpError } from "../http.js";
-import { aggregate, levelFromSeverity } from "../risk.js";
+import { levelFromAdvisories, levelFromSeverity } from "../risk.js";
 import type { EvalContext, ProviderFinding, ProviderResult } from "../types.js";
 
 const BASE = "https://api.deps.dev/v3";
@@ -32,9 +32,14 @@ export interface ResolvedPackage {
   result: ProviderResult;
 }
 
-function pickRepo(version: DepsDevVersion): string | undefined {
-  const fromProject = version.relatedProjects?.find((p) =>
-    /^github\.com\/|^gitlab\.com\/|^bitbucket\.org\//.test(p.projectKey?.id ?? ""),
+export function pickRepo(version: DepsDevVersion): string | undefined {
+  // Only the SOURCE_REPO relation is the package's own repository; other
+  // relations (e.g. ISSUE_TRACKER) can point at a different repo and must not
+  // become the source we score / verify provenance against.
+  const fromProject = version.relatedProjects?.find(
+    (p) =>
+      p.relationType === "SOURCE_REPO" &&
+      /^github\.com\/|^gitlab\.com\/|^bitbucket\.org\//.test(p.projectKey?.id ?? ""),
   )?.projectKey?.id;
   if (fromProject) return fromProject;
 
@@ -109,9 +114,9 @@ export async function evaluateDepsDev(
       });
     }
 
-    const level = advisories.length
-      ? aggregate(advLevels.length ? advLevels : ["high"])
-      : "low";
+    // A known advisory whose severity we can't parse still counts: see
+    // levelFromAdvisories (floors all-unknown advisories to "medium").
+    const level = levelFromAdvisories(advLevels);
     const summary = advisories.length
       ? `${advisories.length} known advisory(ies) for ${version}`
       : `No known advisories for ${version}`;

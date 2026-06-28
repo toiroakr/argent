@@ -54,11 +54,29 @@ export interface PackageRef {
   repoUrl?: string;
 }
 
+/**
+ * How much of the security signal actually came back. The `overall` level is a
+ * worst-case across the sources that ran — but it says nothing about how many
+ * DIDN'T. A package whose security sources mostly errored or were skipped can
+ * look as clean as a fully-vetted one; coverage makes that gap explicit so a
+ * thin assessment isn't mistaken for a reassuring one.
+ */
+export interface Coverage {
+  /** Security (non-advisory) providers that produced a real signal. */
+  evaluated: number;
+  /** Total security (non-advisory) providers attempted. */
+  total: number;
+  /** Security providers that contributed nothing, with why. */
+  missing: { provider: string; reason: "skipped" | "error" | "unknown" }[];
+}
+
 export interface RiskReport {
   package: PackageRef;
   results: ProviderResult[];
   /** Worst-case level across all providers that ran successfully. */
   overall: RiskLevel;
+  /** Security-signal coverage behind `overall` (see {@link Coverage}). */
+  coverage: Coverage;
   /** ISO timestamp. */
   generatedAt: string;
 }
