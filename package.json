@@ -9,7 +9,9 @@
   },
   "packageManager": "pnpm@10.32.1",
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "scripts": {
     "build": "pnpm --filter \"./packages/*\" run build",
@@ -17,7 +19,11 @@
     "dev:web": "pnpm --filter @argent/web run dev",
     "cli": "pnpm --filter @toiroakr/argent run start --",
     "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test"
+    "test": "pnpm -r run test",
+    "release": "pnpm build && pnpm changeset publish"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0"
+  }
 }
