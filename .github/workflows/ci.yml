@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -18,3 +20,33 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  karinto:
+    name: Lint workflows (karinto)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Lint this repo's own workflows with karinto
+        run: |
+          set -uo pipefail
+          fail=0
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -f "$f" ] || continue
+            echo "::group::$f"
+            resp=$(curl -sS --max-time 30 \
+              -X POST "https://karinto.toiroakr.workers.dev?persona=regular" \
+              -H "content-type: text/plain" \
+              --data-binary @"$f") || { echo "::error file=$f::karinto request failed"; fail=1; echo "::endgroup::"; continue; }
+            echo "$resp" | jq -r '.result.diagnostics[]? | "\(.severity): \(.rule) — \(.message)"'
+            errors=$(echo "$resp" | jq '[.result.diagnostics[]? | select(.severity=="error")] | length')
+            if [ "$errors" -gt 0 ]; then
+              echo "::error file=$f::karinto found $errors error(s)"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $fail
