@@ -320,7 +320,8 @@ td.size {
 td.verdict.reimplement {
   color: var(--accent);
 }
-td.verdict.consider {
+td.verdict.consider,
+td.verdict.partial {
   color: var(--medium);
 }
 td.verdict.keep,

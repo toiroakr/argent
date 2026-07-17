@@ -45,19 +45,25 @@ Build-vs-Buy — are advisory (marked 💡): shown but excluded from the overall
 Beyond "is it risky", `argent` also asks **"should you even take this
 dependency?"** A tiny, mundane package is often cheaper to reimplement (these
 days, with AI) than to carry — every dependency is supply-chain surface area.
-The `Build-vs-Buy` signal combines:
+The `Build-vs-Buy` signal weighs two things **separately**:
 
-- **Size & self-containment** — unpacked size and file count (npm registry) plus
-  the resolved transitive dependency count (deps.dev).
+- **The package's own code** — its unpacked size and file count (npm registry):
+  is *this* wrapper thin?
+- **Each direct dependency's own weight** — not just how many it has, but the
+  install footprint each one *exclusively* pulls in (deps.dev's resolved
+  graph, shared subtrees excluded). A package can have only 1–3 direct
+  dependencies and still not be "self-contained" if one of them is huge.
 - **Domain sensitivity** — whether the package looks like crypto / auth / jwt /
   sanitization / randomness etc. Rolling your own (or AI-generating) those is a
   bad idea no matter how small, so they always lean **KEEP**.
 
-It produces a verdict — **REIMPLEMENT? · CONSIDER · KEEP** — e.g. `is-odd`
-(6 KB, trivial) → REIMPLEMENT?, `jsonwebtoken` (security-sensitive) → KEEP,
-`express` (large graph) → KEEP. This is an **adoption axis, not a security
-severity**, so it is shown separately and never raises the security `overall`
-level.
+Crossing those two axes produces a verdict — **REIMPLEMENT? · PARTIAL ·
+CONSIDER · KEEP** — e.g. `is-odd` (6 KB, one lightweight dep) → REIMPLEMENT?,
+`read-pkg-up` (thin wrapper, but 2 of its 3 direct deps are heavy) → PARTIAL
+("reimplement the wrapper, keep depending directly on `read-pkg`/`type-fest`"),
+`jsonwebtoken` (security-sensitive) → KEEP, `express` (large graph throughout)
+→ KEEP. This is an **adoption axis, not a security severity**, so it is shown
+separately and never raises the security `overall` level.
 
 ## Two ways to use it
 
@@ -261,8 +267,8 @@ pnpm cli express --json
 - Advisory severities (`CRITICAL/HIGH/MEDIUM/LOW`) map directly.
 - The package's **overall** level is the worst real level across providers;
   `unknown` never raises the overall on its own.
-- The `Build-vs-Buy` axis is **advisory**: its REIMPLEMENT?/CONSIDER/KEEP verdict
-  is reported but excluded from the security `overall`.
+- The `Build-vs-Buy` axis is **advisory**: its REIMPLEMENT?/PARTIAL/CONSIDER/KEEP
+  verdict is reported but excluded from the security `overall`.
 
 > ⚠️ `argent` is a decision aid, not a guarantee. A clean report means "no
 > signal from these sources", not "safe". Treat results as one input alongside
