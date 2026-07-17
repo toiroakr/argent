@@ -120,6 +120,7 @@ function paintDropValue(score: number, text: string): string {
 const VERDICT_COLOR: Record<DepAudit["verdict"], (s: string) => string> = {
   reimplement: pc.cyan,
   consider: pc.yellow,
+  partial: pc.magenta,
   keep: pc.dim,
   unknown: pc.dim,
 };

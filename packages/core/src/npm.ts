@@ -48,7 +48,7 @@ export function makeRegistry(fetchImpl: typeof fetch): RegistryClient {
 }
 
 /** Runs `fn` over items with bounded concurrency, preserving order. */
-async function mapLimit<T, R>(
+export async function mapLimit<T, R>(
   items: T[],
   limit: number,
   fn: (item: T) => Promise<R>,
