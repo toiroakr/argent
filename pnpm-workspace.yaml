@@ -1,3 +1,9 @@
 packages:
   - "packages/*"
   - "apps/*"
+
+lockfile:
+  format: v13
+
+allowBuilds:
+  "esbuild": true
