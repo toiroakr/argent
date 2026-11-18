@@ -1,11 +1,11 @@
 name: Add changeset for Renovate PR
 
 on:
-  pull_request:
+  pull_request_target: # karinto: ignore[dangerous-triggers] Required for trusted base actions; PR code is never executed.
     types: [opened, synchronize]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions: {}
@@ -32,18 +32,24 @@ jobs:
       - name: Checkout PR head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
           fetch-depth: 0
+
+      - name: Fetch PR data without checking it out
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git fetch --no-tags --quiet origin "$HEAD_SHA"
 
       - name: Check for existing changeset
         id: existing
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eo pipefail
           FILENAME=".changeset/renovate-${PR_NUMBER}.md"
-          if [ -f "$FILENAME" ]; then
+          if git cat-file -e "${HEAD_SHA}:${FILENAME}" 2>/dev/null; then
             echo "found=true" >> "$GITHUB_OUTPUT"
             echo "Changeset $FILENAME already exists; skipping"
           else
@@ -60,24 +66,23 @@ jobs:
         if: steps.existing.outputs.found == 'false'
         id: lockfile
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eo pipefail
-          git fetch --no-tags --quiet origin "$BASE_REF"
-          BASE_SHA=$(git merge-base "origin/${BASE_REF}" HEAD)
+          BASE_SHA=$(git merge-base HEAD "$HEAD_SHA")
           git show "$BASE_SHA:pnpm-lock.yaml" > /tmp/renovate-base-lock.yaml
-          node .github/scripts/lockfile-runtime-diff.mjs --before /tmp/renovate-base-lock.yaml
+          git show "$HEAD_SHA:pnpm-lock.yaml" > /tmp/renovate-head-lock.yaml
+          node .github/scripts/lockfile-runtime-diff.mjs --before /tmp/renovate-base-lock.yaml --after /tmp/renovate-head-lock.yaml
 
       - name: Detect runtime dependency changes
         if: steps.existing.outputs.found == 'false'
         id: runtime
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           LOCK_CHANGED_NAMES: ${{ steps.lockfile.outputs.changed-names }}
         run: |
           set -eo pipefail
-          git fetch --no-tags --quiet origin "$BASE_REF"
-          BASE_SHA=$(git merge-base "origin/${BASE_REF}" HEAD)
+          BASE_SHA=$(git merge-base HEAD "$HEAD_SHA")
 
           FILTER='{dependencies, peerDependencies, optionalDependencies}'
           CHANGED_PACKAGES="${LOCK_CHANGED_NAMES}"$'\n'
@@ -90,9 +95,17 @@ jobs:
             if git show "${BASE_SHA}:${pkg_json}" > /tmp/base-pkg.json 2>/dev/null; then
               jq -S "$FILTER" /tmp/base-pkg.json > /tmp/base-runtime-deps.json
             else
-              echo '{}' | jq -S "$FILTER" > /tmp/base-runtime-deps.json
+              echo '{}' > /tmp/base-pkg.json
+              jq -S "$FILTER" /tmp/base-pkg.json > /tmp/base-runtime-deps.json
             fi
-            jq -S "$FILTER" "$pkg_json" > /tmp/head-runtime-deps.json
+            git show "${HEAD_SHA}:${pkg_json}" > /tmp/head-pkg.json
+            jq -S "$FILTER" /tmp/head-pkg.json > /tmp/head-runtime-deps.json
+            jq -S '{peerDependencies, peerDependenciesMeta}' /tmp/base-pkg.json > /tmp/base-peers.json
+            jq -S '{peerDependencies, peerDependenciesMeta}' /tmp/head-pkg.json > /tmp/head-peers.json
+            if ! diff -u /tmp/base-peers.json /tmp/head-peers.json; then
+              echo "::error::Peer dependency contracts changed; add a manually reviewed changeset."
+              exit 1
+            fi
 
             if ! diff -u /tmp/base-runtime-deps.json /tmp/head-runtime-deps.json; then
               PKG_NAME=$(jq -r .name "$pkg_json")
