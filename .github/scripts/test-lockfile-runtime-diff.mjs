@@ -640,3 +640,28 @@ test("ignores importer paths that traverse outside their workspace", () => {
   const after = before.replace('"1.0.0"', '"2.0.0"');
   assert.match(runDiff(before, after), /No runtime dependency changes/);
 });
+
+test("keeps explicitly unbound optional peers independent of development providers", () => {
+  const lock = (version, withPeers = {}) =>
+    JSON.stringify({
+      lockfileVersion: "13.0",
+      projects: {
+        lib: {
+          dependencies: { example: { specifier: "1.0.0", with: withPeers } },
+          devDependencies: { react: version },
+        },
+      },
+      packages: {
+        "example@1.0.0": {
+          peerDependencies: { react: "^18.2.0" },
+          peerDependenciesMeta: { react: { optional: true } },
+          snapshots: [{}, { peerDependencies: { react: "18.2.0" } }],
+        },
+      },
+    });
+  assert.match(runDiff(lock("18.2.0"), lock("18.3.1")), /No runtime dependency changes/);
+  assert.match(
+    runDiff(lock("18.2.0"), lock("18.2.0", { react: "18.2.0" })),
+    /Runtime dependency changes detected in: published-fixture/,
+  );
+});
