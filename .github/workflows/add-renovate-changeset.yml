@@ -1,0 +1,184 @@
+name: Add changeset for Renovate PR
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  detect:
+    name: Detect changeset requirement
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    if: |
+      startsWith(github.event.pull_request.head.ref, 'renovate/') &&
+      github.event.pull_request.user.login == 'renovate[bot]' &&
+      github.event.pull_request.user.type == 'Bot' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    outputs:
+      changed: ${{ steps.runtime.outputs.changed }}
+      content: ${{ steps.content.outputs.content }}
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check for existing changeset
+        id: existing
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -eo pipefail
+          FILENAME=".changeset/renovate-${PR_NUMBER}.md"
+          if [ -f "$FILENAME" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Changeset $FILENAME already exists; skipping"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js
+        if: steps.existing.outputs.found == 'false'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Detect resolved runtime dependency changes
+        if: steps.existing.outputs.found == 'false'
+        id: lockfile
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -eo pipefail
+          git fetch --no-tags --quiet origin "$BASE_REF"
+          BASE_SHA=$(git merge-base "origin/${BASE_REF}" HEAD)
+          git show "$BASE_SHA:pnpm-lock.yaml" > /tmp/renovate-base-lock.yaml
+          node .github/scripts/lockfile-runtime-diff.mjs --before /tmp/renovate-base-lock.yaml
+
+      - name: Detect runtime dependency changes
+        if: steps.existing.outputs.found == 'false'
+        id: runtime
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          LOCK_CHANGED_NAMES: ${{ steps.lockfile.outputs.changed-names }}
+        run: |
+          set -eo pipefail
+          git fetch --no-tags --quiet origin "$BASE_REF"
+          BASE_SHA=$(git merge-base "origin/${BASE_REF}" HEAD)
+
+          FILTER='{dependencies, peerDependencies, optionalDependencies}'
+          CHANGED_PACKAGES="${LOCK_CHANGED_NAMES}"$'\n'
+          for pkg_json in package.json packages/*/package.json; do
+            [ -f "$pkg_json" ] || continue
+            if [ "$(jq -r '.private == true' "$pkg_json")" = "true" ]; then
+              continue
+            fi
+
+            if git show "${BASE_SHA}:${pkg_json}" > /tmp/base-pkg.json 2>/dev/null; then
+              jq -S "$FILTER" /tmp/base-pkg.json > /tmp/base-runtime-deps.json
+            else
+              echo '{}' | jq -S "$FILTER" > /tmp/base-runtime-deps.json
+            fi
+            jq -S "$FILTER" "$pkg_json" > /tmp/head-runtime-deps.json
+
+            if ! diff -u /tmp/base-runtime-deps.json /tmp/head-runtime-deps.json; then
+              PKG_NAME=$(jq -r .name "$pkg_json")
+              CHANGED_PACKAGES="${CHANGED_PACKAGES}${PKG_NAME}"$'\n'
+            fi
+          done
+
+          CHANGED_PACKAGES=$(printf '%s\n' "$CHANGED_PACKAGES" | sed '/^$/d' | sort -u)
+          if [ -z "$CHANGED_PACKAGES" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No runtime dependency changes; no changeset needed."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            PKGS_DELIM="ghapkgs_${RANDOM}${RANDOM}${RANDOM}"
+            {
+              echo "packages<<$PKGS_DELIM"
+              printf '%s\n' "$CHANGED_PACKAGES"
+              echo "$PKGS_DELIM"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build changeset content
+        if: steps.existing.outputs.found == 'false' && steps.runtime.outputs.changed == 'true'
+        id: content
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          CHANGED_PACKAGES: ${{ steps.runtime.outputs.packages }}
+        run: |
+          set -eo pipefail
+          DELIM="ghadelim_${RANDOM}${RANDOM}${RANDOM}"
+          {
+            echo "content<<$DELIM"
+            echo "---"
+            printf '%s\n' "$CHANGED_PACKAGES" | while IFS= read -r pkg; do
+              if [ -n "$pkg" ]; then
+                printf '"%s": patch\n' "$pkg"
+              fi
+            done
+            echo "---"
+            echo ""
+            printf '%s\n' "$PR_TITLE"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+  commit:
+    name: Commit changeset
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: read
+
+      - name: Commit changeset through GitHub API
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          CONTENT: ${{ needs.detect.outputs.content }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = Number(process.env.PR_NUMBER);
+            const expected = process.env.EXPECTED_SHA;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+            if (pr.state !== 'open' || pr.head.sha !== expected ||
+                pr.head.repo?.full_name !== `${owner}/${repo}` ||
+                pr.user.login !== 'renovate[bot]' || !pr.head.ref.startsWith('renovate/')) {
+              throw new Error('The Renovate PR changed before the changeset could be committed');
+            }
+            const { data: base } = await github.rest.git.getCommit({ owner, repo, commit_sha: expected });
+            const { data: tree } = await github.rest.git.createTree({
+              owner, repo, base_tree: base.tree.sha,
+              tree: [{ path: `.changeset/renovate-${pull_number}.md`, mode: '100644', type: 'blob', content: process.env.CONTENT }],
+            });
+            const { data: commit } = await github.rest.git.createCommit({
+              owner, repo, message: 'chore: add changeset for renovate', tree: tree.sha, parents: [expected],
+            });
+            await github.rest.git.updateRef({ owner, repo, ref: `heads/${pr.head.ref}`, sha: commit.sha, force: false });

@@ -3,22 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "description": "Assess the risk of npm packages before you install them, using socket.dev, deps.dev, OpenSSF Scorecard and Snyk Advisor.",
+  "license": "MIT",
   "type": "module",
-  "engines": {
-    "node": "^24 || >=26"
-  },
-  "packageManager": "pnpm@12.21.0",
   "scripts": {
     "build": "pnpm --filter \"./packages/*\" run build",
     "build:web": "pnpm --filter @argent/web run build",
     "dev:web": "pnpm --filter @argent/web run dev",
     "cli": "pnpm --filter @toiroakr/argent run start --",
     "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test",
+    "test": "node --test .github/scripts/test-lockfile-runtime-diff.mjs && pnpm -r run test",
     "release": "pnpm build && pnpm changeset publish"
   },
-  "license": "MIT",
   "devDependencies": {
     "@changesets/cli": "^3.0.0"
-  }
+  },
+  "engines": {
+    "node": "^24 || >=26"
+  },
+  "packageManager": "pnpm@12.21.0"
 }
