@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync, appendFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, isAbsolute, win32 } from "node:path";
 import { randomUUID } from "node:crypto";
 
 function parseArgs(argv) {
@@ -247,6 +247,12 @@ function parseImporters(text, normalize = false) {
 }
 
 function readPackageMeta(importerPath) {
+  if (
+    isAbsolute(importerPath) ||
+    win32.isAbsolute(importerPath) ||
+    importerPath.split(/[\\/]/).includes("..")
+  )
+    return null;
   const pkgPath = importerPath === "." ? "package.json" : join(importerPath, "package.json");
   if (!existsSync(pkgPath)) return null;
   try {

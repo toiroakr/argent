@@ -2,6 +2,6 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:best-practices"],
   "labels": ["dependencies"],
-  "minimumReleaseAge": "7 days",
-  "prConcurrentLimit": 5
+  "prConcurrentLimit": 5,
+  "gitIgnoredAuthors": ["271965483+toiroakr-release-bot[bot]@users.noreply.github.com"]
 }

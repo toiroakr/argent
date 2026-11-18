@@ -634,3 +634,9 @@ importers:
     /Runtime dependency changes detected in: published-fixture/,
   );
 });
+
+test("ignores importer paths that traverse outside their workspace", () => {
+  const before = v13({ example: "1.0.0" }).replace('"lib":', '"lib/../lib":');
+  const after = before.replace('"1.0.0"', '"2.0.0"');
+  assert.match(runDiff(before, after), /No runtime dependency changes/);
+});
