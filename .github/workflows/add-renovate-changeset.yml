@@ -101,6 +101,7 @@ jobs:
                     sub(/^[^:]+:[[:space:]]*/, "", level)
                     sub(/[[:space:]]*#.*/, "", level)
                     sub(/[[:space:]]+$/, "", level)
+                    gsub(/^["\047]|["\047]$/, "", level)
                     if (key == name) found = (level == "major" || level == required)
                   }
                   END { exit !found }
